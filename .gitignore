@@ -1,0 +1,7 @@
+giverny
+giverny.db
+*.swp
+*.swo
+*.cfg.json
+node_modules
+__pycache__
