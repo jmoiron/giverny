@@ -1,0 +1,20 @@
+<form method="post" action="/invite/{{.token}}" class="login-form">
+    <h2>accept invitation</h2>
+    <p>You've been invited to join <span class="giverny">Giverny</span>. Set a password to create your account.</p>
+    {{if .error}}<p class="form-error">{{.error}}</p>{{end}}
+    <div>
+        <label for="email">email</label>
+        <input type="text" id="email" value="{{.email}}" disabled>
+    </div>
+    <div>
+        <label for="password">password</label>
+        <input type="password" id="password" name="password" required autofocus{{if .pwError}} class="error"{{end}}>
+    </div>
+    <div>
+        <label for="confirm">confirm password</label>
+        <input type="password" id="confirm" name="confirm" required{{if .pwError}} class="error"{{end}}>
+    </div>
+    <div class="login">
+        <button type="submit">create</button>
+    </div>
+</form>

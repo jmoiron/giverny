@@ -3,6 +3,12 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script>
+            (function() {
+                var t = localStorage.getItem('theme') || 'light';
+                if (t === 'dark') document.documentElement.classList.add('dark');
+            })();
+        </script>
         {{if .debug}}
         <link rel="stylesheet/less" href="/static/style.less">
         <script src="/static/js/less.min.js"></script>
@@ -10,22 +16,41 @@
         <link rel="stylesheet" href="/static/style.css">
         {{end}}
         <script src="/static/js/cash.min.js"></script>
-        <title>{{if .title}}{{.title}} — giverny{{else}}giverny{{end}}</title>
+        <script src="/static/js/app.js" defer></script>
+        <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
     </head>
     <body>
         <header>
             <nav>
-                <a href="/">giverny</a>
+                <a href="/" class="logo">Giverny</a>
                 {{if .user}}
-                <span class="user">{{.user}}</span>
-                <a href="/logout/">logout</a>
-                {{else}}
-                <a href="/login/">login</a>
+                <a href="/boards/">boards</a>
+                {{if .user.IsSuperAdmin}}
+                <a href="/admin/users/">users</a>
                 {{end}}
+                {{end}}
+                <div class="nav-right">
+                    {{if .user}}
+                    <span class="user">{{.user.Username}}</span>
+                    <a href="/logout/">logout</a>
+                    {{else}}
+                    <a href="/login/">login</a>
+                    {{end}}
+                    <button id="theme-toggle" aria-label="Toggle dark mode"></button>
+                </div>
             </nav>
         </header>
         <main>
             {{.body}}
         </main>
+        <div id="confirm-modal" class="modal-overlay">
+            <div class="modal">
+                <p id="confirm-message"></p>
+                <div class="modal-actions">
+                    <button id="confirm-cancel">cancel</button>
+                    <button id="confirm-ok" class="danger">confirm</button>
+                </div>
+            </div>
+        </div>
     </body>
 </html>

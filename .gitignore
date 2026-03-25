@@ -3,5 +3,6 @@ giverny.db
 *.swp
 *.swo
 *.cfg.json
+static/fa/ve
 node_modules
 __pycache__

@@ -20,6 +20,9 @@ type Config struct {
 	monet.Config
 	// Secret is used for reversible encryption of stored secrets (e.g. SMTP password).
 	Secret string
+	// BaseURL is the public-facing URL of the site, used for generating links in emails.
+	// Defaults to http://localhost:7100 for development.
+	BaseURL string
 }
 
 // String returns the config as indented JSON (omits Secret).
@@ -64,6 +67,7 @@ func Default() *Config {
 	c.ListenAddr = "0.0.0.0:7100"
 	c.SessionSecret = "SET-IN-CONFIG-FILE"
 	c.DatabaseURI = "giverny.db"
+	c.BaseURL = "http://localhost:7100"
 	return c
 }
 

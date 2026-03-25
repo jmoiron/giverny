@@ -1,0 +1,34 @@
+<div class="admin-wrap admin-smtp">
+    <h2>SMTP configuration</h2>
+    {{if .saved}}<p class="flash-ok">Settings saved.</p>{{end}}
+    {{if .error}}<p class="flash-err">{{.error}}</p>{{end}}
+    <form method="post" action="/admin/smtp/">
+        <div class="form-row">
+            <label for="host">host</label>
+            <input type="text" id="host" name="host" value="{{.cfg.Host}}">
+        </div>
+        <div class="form-row">
+            <label for="port">port</label>
+            <input type="number" id="port" name="port" value="{{.cfg.Port}}">
+        </div>
+        <div class="form-row">
+            <label for="username">username</label>
+            <input type="text" id="username" name="username" value="{{.cfg.Username}}">
+        </div>
+        <div class="form-row">
+            <label for="password">password</label>
+            <input type="password" id="password" name="password" placeholder="leave blank to keep existing">
+        </div>
+        <div class="form-row">
+            <label for="from_address">from address</label>
+            <input type="text" id="from_address" name="from_address" value="{{.cfg.FromAddress}}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" name="action" value="save">save</button>
+            <button type="submit" name="action" value="test">save &amp; test send</button>
+        </div>
+    </form>
+    {{if .cfg.UpdatedAt}}
+    <p class="muted">last updated: {{.cfg.UpdatedAt.Format "2006-01-02 15:04"}}</p>
+    {{end}}
+</div>

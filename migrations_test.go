@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/monet/auth"
 	"github.com/jmoiron/monet/conf"
 	"github.com/jmoiron/monet/db/monarch"
@@ -22,6 +23,12 @@ func TestMigrationsUpDown(t *testing.T) {
 	authApp := auth.NewApp(conf.Default(), db)
 	if err := authApp.Migrate(); err != nil {
 		t.Fatalf("monet auth migrate: %v", err)
+	}
+
+	// giverny's auth app extends with user_profile + invitations
+	gauthApp := gauth.NewApp(db, "http://localhost:7100")
+	if err := gauthApp.Migrate(); err != nil {
+		t.Fatalf("giverny auth migrate: %v", err)
 	}
 
 	m, err := monarch.NewManager(db)

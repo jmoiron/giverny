@@ -1,0 +1,60 @@
+<div class="admin-wrap admin-users">
+    <h2>users</h2>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>username</th>
+                <th>email</th>
+                <th>role</th>
+                <th>created</th>
+                <th>last login</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .users}}
+            <tr>
+                <td>{{.Username}}</td>
+                <td>{{.Email}}</td>
+                <td>
+                    <form id="role-{{.ID}}" method="post" action="/admin/users/{{.ID}}/role">
+                        <select name="role">
+                            <option value="readonly"{{if eq .Role "readonly"}} selected{{end}}>readonly</option>
+                            <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
+                            <option value="superadmin"{{if eq .Role "superadmin"}} selected{{end}}>superadmin</option>
+                        </select>
+                    </form>
+                </td>
+                <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+                <td>{{if .LastLoginAt}}{{.LastLoginAt.Format "2006-01-02"}}{{else}}never{{end}}</td>
+                <td>
+                    <div class="row-actions">
+                        <form id="delete-{{.ID}}" method="post" action="/admin/users/{{.ID}}/delete"></form>
+                        <i class="fa-solid fa-floppy-disk action-icon save-icon"
+                           data-submit="role-{{.ID}}" title="save role"></i>
+                        {{if and (not .IsSuperAdmin) (ne .ID $.user.ID)}}
+                        <i class="fa-solid fa-circle-xmark action-icon delete-icon"
+                           data-submit="delete-{{.ID}}"
+                           data-confirm="Delete {{.Email}}? This cannot be undone."
+                           title="delete user"></i>
+                        {{end}}
+                    </div>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+
+    <h3>invite a user</h3>
+    {{if .inviteLink}}
+    <p>invitation link (send this to the recipient):</p>
+    <p class="invite-link">
+        <i class="fa-regular fa-copy copy-btn" data-copy="{{.inviteLink}}" title="copy to clipboard"></i>
+        <span>{{.inviteLink}}</span>
+    </p>
+    {{end}}
+    <form class="invite-form" method="post" action="/admin/users/invite">
+        <input type="email" name="email" placeholder="email address" required>
+        <button type="submit">invite</button>
+    </form>
+</div>

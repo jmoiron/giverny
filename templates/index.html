@@ -1,9 +1,9 @@
 <div class="landing">
-{{if .authenticated}}
+{{if .user}}
     <h2>boards</h2>
     <p>No boards have been created yet.</p>
 {{else}}
-    <h2>welcome to giverny</h2>
+    <h1 class="hero-title">Giverny</h1>
     <p>Please <a href="/login/">log in</a> to continue.</p>
 {{end}}
 </div>

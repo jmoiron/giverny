@@ -1,0 +1,146 @@
+@import "theme";
+@import "figtree";
+@import "courgette";
+@import "fa";
+@import "forms";
+@import "login";
+@import "admin";
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: 'Figtree', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+}
+
+a { color: var(--link); }
+a:hover { color: var(--accent); }
+
+header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+
+    nav {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+
+        a {
+            text-decoration: none;
+
+            &.logo {
+                font-family: 'Courgette', sans-serif;
+                font-size: 1.25rem;
+                font-weight: bold;
+            }
+        }
+    }
+
+    .nav-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+
+        a[href="/logout/"]:hover { color: var(--red); }
+    }
+}
+
+body {
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+#theme-toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--border);
+    border: none;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.25s ease;
+    padding: 0;
+
+    &::after {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+        top: 3px;
+        left: 3px;
+        transition: transform 0.25s ease;
+    }
+}
+
+html.dark #theme-toggle {
+    background: var(--sky);
+
+    &::after {
+        transform: translateX(16px);
+    }
+}
+
+.giverny { font-family: 'Courgette', sans-serif; }
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+
+    &.active { display: flex; }
+
+    .modal {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.5rem 2rem;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+
+        p { margin: 0 0 1.5rem; }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+
+            .form-inputs();
+
+            button.danger {
+                background: var(--red);
+                &:hover { background: var(--red); opacity: 0.85; }
+            }
+        }
+    }
+}
+
+main { padding: 1rem; }
+
+.landing {
+    text-align: center;
+    padding: 3rem 1rem;
+
+    .hero-title {
+        font-family: 'Courgette', sans-serif;
+        font-size: 8rem;
+        margin: 0 0 1rem;
+        background-image: url('/static/img/lillies.jpg');
+        background-size: cover;
+        background-position: center;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+}

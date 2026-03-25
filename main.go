@@ -11,13 +11,14 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/giverny/kanban"
-	"github.com/jmoiron/giverny/smtp"
+	gsmtp "github.com/jmoiron/giverny/smtp"
 	"github.com/jmoiron/monet/app"
 	"github.com/jmoiron/monet/auth"
 	"github.com/jmoiron/monet/db"
@@ -26,6 +27,7 @@ import (
 	"github.com/jmoiron/monet/pkg/hotswap"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -140,10 +142,14 @@ func main() {
 
 	// monet's auth app creates the base user table and provides login/logout
 	authApp := auth.NewApp(&cfg.Config, dbh)
+	// giverny's auth app extends monet's with user_profile + invitations
+	gauthApp := gauth.NewApp(dbh, cfg.BaseURL)
+	// smtp app manages email config and sending
+	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
 	// apps is the ordered list of sub-applications. Auth must come first
 	// since other tables reference user(id).
-	apps := []app.App{authApp}
+	apps := []app.App{authApp, gauthApp, smtpApp}
 
 	reg := mtr.NewRegistry()
 	reg.AddBaseFS("base", "templates/base.html", templates)
@@ -157,7 +163,7 @@ func main() {
 	// giverny-specific migrations (depend on monet's user table)
 	must(migrateGiverny(dbh), "running giverny migrations")
 
-	if runUtil(&opts, dbh) {
+	if runUtil(&opts, gauthApp, smtpApp, cfg.BaseURL) {
 		return
 	}
 
@@ -173,6 +179,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(mtr.AddRegistryMiddleware(reg))
+	r.Use(gauth.AddUserMiddleware(gauthApp.Users()))
 
 	for _, a := range apps {
 		a.Bind(r)
@@ -204,10 +211,10 @@ func main() {
 
 func index(w http.ResponseWriter, r *http.Request) {
 	reg := mtr.RegistryFromContext(r.Context())
-	sm := auth.SessionFromContext(r.Context())
+	u := gauth.UserFromContext(r.Context())
 	err := reg.RenderWithBase(w, "base", "templates/index.html", mtr.Ctx{
-		"title":         "",
-		"authenticated": sm.IsAuthenticated(r),
+		"title": "",
+		"user":  u,
 	})
 	if err != nil {
 		app.Http500("rendering index", w, err)
@@ -245,7 +252,7 @@ func parseOpts(opts *options) {
 	pflag.StringVarP(&opts.ConfigPath, "config", "c", os.Getenv(cfgEnvVar), "path to a json config file")
 	pflag.BoolVarP(&opts.Debug, "debug", "d", false, "enable debug mode")
 	pflag.BoolVarP(&opts.Version, "version", "v", false, "show version info")
-	pflag.StringVar(&opts.AddUser, "add-user", "", "create a super-admin user (prompted for password)")
+	pflag.StringVar(&opts.AddUser, "add-user", "", "create a super-admin user with the given username (email = username, prompted for password)")
 	pflag.StringVar(&opts.Invite, "invite", "", "send an invitation email to the given address")
 	pflag.StringVar(&opts.GenConf, "gen-conf", "", "generate a config file with random secrets at the given path")
 	pflag.BoolVar(&opts.RegenSecrets, "regen-secrets", false, "regenerate SessionSecret and Secret in the config file (requires --config)")
@@ -259,8 +266,6 @@ func parseOpts(opts *options) {
 // base user table).
 func givernyMigrations() []monarch.Set {
 	return []monarch.Set{
-		gauth.UserProfileMigrations,
-		gauth.InvitationMigrations,
 		kanban.BoardMigrations,
 		kanban.ColumnMigrations,
 		kanban.CardMigrations,
@@ -271,7 +276,6 @@ func givernyMigrations() []monarch.Set {
 		kanban.ActivityMigrations,
 		kanban.CardFTSMigrations,
 		kanban.CommentFTSMigrations,
-		smtp.ConfigMigrations,
 	}
 }
 
@@ -338,14 +342,66 @@ func regenSecrets(path string) error {
 	return enc.Encode(cfg)
 }
 
-func runUtil(opts *options, dbh db.DB) bool {
+func runUtil(opts *options, gauthApp *gauth.App, smtpApp *gsmtp.App, baseURL string) bool {
 	switch {
 	case opts.AddUser != "":
-		fmt.Println("--add-user: not yet implemented (Phase 3)")
+		if err := addUser(opts.AddUser, gauthApp.Users()); err != nil {
+			slog.Error("adding user", "err", err)
+			os.Exit(1)
+		}
 	case opts.Invite != "":
-		fmt.Println("--invite: not yet implemented (Phase 3)")
+		if err := sendInvite(opts.Invite, gauthApp, smtpApp, baseURL); err != nil {
+			slog.Error("sending invite", "err", err)
+			os.Exit(1)
+		}
 	default:
 		return false
 	}
 	return true
+}
+
+func sendInvite(email string, gauthApp *gauth.App, smtpApp *gsmtp.App, baseURL string) error {
+	// Use a zero ID for CLI-created invites (no logged-in user).
+	token, err := gauthApp.Invites().Create(email, 0)
+	if err != nil {
+		return fmt.Errorf("creating invitation: %w", err)
+	}
+	link := fmt.Sprintf("%s/invite/%s", strings.TrimRight(baseURL, "/"), token)
+	fmt.Printf("invitation link for %s:\n  %s\n", email, link)
+
+	smtpCfg, err := smtpApp.Service().Get()
+	if err != nil || smtpCfg.Host == "" {
+		fmt.Println("(smtp not configured — send the link above manually)")
+		return nil
+	}
+	body := fmt.Sprintf("You have been invited to Giverny.\n\nAccept your invitation here:\n%s\n\nThis link expires in 72 hours.\n", link)
+	if err := smtpApp.Service().Send(email, "You're invited to Giverny", body); err != nil {
+		return fmt.Errorf("sending email: %w", err)
+	}
+	fmt.Println("invitation email sent.")
+	return nil
+}
+
+func addUser(username string, users *gauth.UserProfileService) error {
+	existing, err := users.GetByUsername(username)
+	if err == nil {
+		fmt.Printf("user %q already exists. replace? [y/N]: ", username)
+		var answer string
+		fmt.Scan(&answer)
+		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+			return nil
+		}
+		if err := users.DeleteUser(existing.ID); err != nil {
+			return fmt.Errorf("deleting existing user: %w", err)
+		}
+	}
+
+	fmt.Print("password: ")
+	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return err
+	}
+
+	return users.CreateUser(username, username, string(passwordBytes), gauth.RoleSuperAdmin)
 }
