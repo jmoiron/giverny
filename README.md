@@ -1,4 +1,6 @@
-Giverny is a kanban web app that is built on top of the library developed in [monet](/jmoiron/monet/).
+## Giverny
+
+Giverny is a kanban web app that is built on top of the library developed in [monet](https://github.com/jmoiron/monet/).
 
 It compiles to a single Go binary and uses sqlite3 for data storage.
 
