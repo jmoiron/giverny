@@ -93,7 +93,12 @@
                         {{end}}
                     </select>
                 </div>
+                {{if .card.ArchivedAt}}
+                <button type="button" class="quick-control-btn cyan-btn" id="card-unarchive-btn" data-card-id="{{.card.ID}}">unarchive</button>
+                <button type="button" class="quick-control-btn danger-fill-btn" id="card-delete-btn" data-card-id="{{.card.ID}}">delete</button>
+                {{else}}
                 <button type="button" class="quick-control-btn danger-btn" id="card-archive-btn" data-card-id="{{.card.ID}}">archive</button>
+                {{end}}
             </aside>
         </div>
     </form>

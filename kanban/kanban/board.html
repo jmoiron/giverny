@@ -79,11 +79,43 @@
             </div>
         </div>
         {{end}}
+        <div class="board-column archived-column is-hidden" id="archived-column">
+            <div class="col-header">
+                <i class="fa-solid fa-trash-can archived-column-icon"></i>
+                <span class="col-name">archived</span>
+                <div class="col-actions">
+                    <button type="button" class="col-action-btn col-menu-trigger" title="archived menu">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
+                    <div class="col-dropdown">
+                        <button type="button" class="col-dropdown-item danger" id="archived-delete-all-btn">delete all</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-cards archived-cards" id="archived-cards">
+                {{range .archived}}
+                <div class="kanban-card" data-id="{{.ID}}">
+                    <div class="card-title">{{.Title}}</div>
+                    {{if .Labels}}
+                    <div class="card-labels">
+                        {{range .Labels}}
+                        <span class="label-pill {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+                <div class="archived-empty-state{{if .archived}} is-hidden{{end}}" id="archived-empty-state">no archived cards</div>
+            </div>
+        </div>
         {{if .isAdmin}}
         <div class="add-column-wrap">
             <button class="add-column-btn" id="add-column-btn" title="add column">
                 <i class="fa-solid fa-plus"></i>
             </button>
+            <a href="#" class="archived-toggle-link" id="archived-toggle-link" title="view archived cards">
+                <i class="fa-solid fa-trash-can"></i>
+            </a>
             <form class="add-column-form" method="post" action="/boards/{{.board.Slug}}/columns" style="display:none">
                 <input type="text" name="name" placeholder="column name" required>
                 <input type="hidden" name="color" value="">

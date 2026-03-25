@@ -9,6 +9,7 @@ const BoardGlobal = ""
 // Event type constants.
 const (
 	EventCardCreated             = "card.created"
+	EventCardDeleted             = "card.deleted"
 	EventCardUpdated             = "card.updated"
 	EventCardMoved               = "card.move"
 	EventCardReordered           = "card.reorder"
@@ -79,6 +80,10 @@ type CardCreatedPayload struct {
 	CardID   int64  `json:"card_id"`
 	ColumnID int64  `json:"column_id"`
 	HTML     string `json:"html"`
+}
+
+type CardDeletedPayload struct {
+	CardID int64 `json:"card_id"`
 }
 
 type ColumnReorderedPayload struct {

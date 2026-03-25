@@ -125,7 +125,10 @@ func (a *App) Bind(r chi.Router) {
 				r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
 				r.Post("/move", a.handleMoveCard)
 				r.Post("/archive", a.handleArchiveCard)
+				r.Post("/delete", a.handleDeleteCard)
+				r.Post("/unarchive", a.handleUnarchiveCard)
 			})
+			r.Post("/cards/archived/delete", a.handleDeleteArchivedCards)
 		})
 	})
 }
@@ -373,6 +376,11 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("listing cards", w, err)
 		return
 	}
+	archivedCards, err := a.cards.ListArchivedByBoard(board.ID)
+	if err != nil {
+		app.Http500("listing archived cards", w, err)
+		return
+	}
 
 	columnsWithCards := BuildColumns(cols, cards)
 
@@ -381,6 +389,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		"title":     board.Name,
 		"board":     board,
 		"columns":   columnsWithCards,
+		"archived":  archivedCards,
 		"user":      user,
 		"isAdmin":   user.IsAdmin(),
 		"mainClass": "board-main",
@@ -887,6 +896,81 @@ func (a *App) handleArchiveCard(w http.ResponseWriter, r *http.Request) {
 	if err := a.cards.Archive(cardID); err != nil {
 		apiErr(w, http.StatusInternalServerError, "archive failed")
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) handleUnarchiveCard(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	cardIDStr := chi.URLParam(r, "cardID")
+	cardID, err := parseID(cardIDStr)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	card, err := a.cards.Unarchive(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "unarchive failed")
+		return
+	}
+	reg := mtr.RegistryFromContext(r.Context())
+	var buf bytes.Buffer
+	if err := reg.Render(&buf, "kanban/card_snippet.html", mtr.Ctx{
+		"card":  card,
+		"board": slug,
+	}); err != nil {
+		apiErr(w, http.StatusInternalServerError, "rendering card failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"card_id":   card.ID,
+		"column_id": card.ColumnID,
+		"html":      buf.String(),
+	})
+}
+
+func (a *App) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	cardIDStr := chi.URLParam(r, "cardID")
+	cardID, err := parseID(cardIDStr)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "load failed")
+		return
+	}
+	if err := a.cards.Delete(cardID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	if card.BoardID != 0 {
+		a.publishBoardEvent(slug, EventCardDeleted, CardDeletedPayload{CardID: cardID})
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) handleDeleteArchivedCards(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	board, err := a.boards.GetBySlug(slug)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "board not found")
+		return
+	}
+	archivedCards, err := a.cards.ListArchivedByBoard(board.ID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "load failed")
+		return
+	}
+	if err := a.cards.DeleteArchivedByBoard(board.ID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	for _, card := range archivedCards {
+		a.publishBoardEvent(slug, EventCardDeleted, CardDeletedPayload{CardID: card.ID})
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

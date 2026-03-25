@@ -183,6 +183,9 @@
 .fa-trash {
   --fa: "\f1f8";
 }
+.fa-trash-can {
+  --fa: "\f2ed";
+}
 .fa-triangle-exclamation {
   --fa: "\f071";
 }

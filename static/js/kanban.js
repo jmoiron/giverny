@@ -218,6 +218,13 @@ $(function() {
         $selected.toggleClass('is-empty', $selected.find('.label-pill').length === 0);
     }
 
+    function updateArchivedColumnState() {
+        var $archivedCards = $('#archived-cards');
+        var $empty = $('#archived-empty-state');
+        if (!$archivedCards.length || !$empty.length) return;
+        $empty.toggleClass('is-hidden', $archivedCards.find('.kanban-card').length > 0);
+    }
+
     function createLabelPill(label) {
         var $pill = $('<span class="label-pill selected"></span>');
         $pill.addClass(label.textClass || labelTextClass(label.color || DEFAULT_LABEL_COLOR));
@@ -578,10 +585,23 @@ $(function() {
         });
     }
 
+    function applyCardDeleted(payload) {
+        if (!payload || !payload.card_id) return;
+        $('.kanban-card[data-id="' + payload.card_id + '"]').remove();
+        updateArchivedColumnState();
+        var $form = getActiveCardForm(payload.card_id);
+        if ($form.length) {
+            $cardModal.removeClass('active');
+        }
+    }
+
     function applyBoardEvent(evt) {
         switch (evt.type) {
         case 'card.created':
             applyCardCreated(evt.payload);
+            break;
+        case 'card.deleted':
+            applyCardDeleted(evt.payload);
             break;
         case 'card.reorder':
             applyCardReordered(evt.payload);
@@ -930,6 +950,12 @@ $(function() {
         $('.add-column-form').show().find('input[name=name]')[0].focus();
     });
 
+    $('#archived-toggle-link').on('click', function(e) {
+        e.preventDefault();
+        $('#archived-column').toggleClass('is-hidden');
+        updateArchivedColumnState();
+    });
+
     $(document).on('click', '.add-column-form .btn-cancel', function() {
         $('.add-column-form').hide()[0].reset();
         $('#add-column-btn').show();
@@ -973,6 +999,29 @@ $(function() {
 
     $(document).on('click', '.col-dropdown', function(e) {
         e.stopPropagation();
+    });
+
+    $(document).on('click', '[data-submit]', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var formId = $(this).data('submit');
+        var message = $(this).data('confirm');
+        if (message && !window.confirm(message)) return;
+        var form = document.getElementById(formId);
+        if (form) form.submit();
+    });
+
+    $(document).on('click', '#archived-delete-all-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!window.confirm('Delete all archived cards permanently?')) return;
+        post('/boards/' + board + '/cards/archived/delete', {})
+            .then(function(r) { return r.json(); })
+            .then(function() {
+                $('#archived-cards .kanban-card').remove();
+                updateArchivedColumnState();
+                $('.col-actions').removeClass('open');
+            });
     });
 
     $(document).on('click', '.col-collapse-btn', function(e) {
@@ -1358,9 +1407,43 @@ $(function() {
     // Archive card
     $(document).on('click', '#card-archive-btn', function() {
         var cardId = $(this).data('card-id');
+        var $card = $('.board-column:not(.archived-column) .kanban-card[data-id="' + cardId + '"]').first();
         post('/boards/' + board + '/cards/' + cardId + '/archive', {})
             .then(function() {
-                $('.kanban-card[data-id="' + cardId + '"]').remove();
+                var $archivedCards = $('#archived-cards');
+                if ($card.length && $archivedCards.length) {
+                    var $archivedCard = $card.clone();
+                    $archivedCard.removeAttr('draggable');
+                    $archivedCards.prepend($archivedCard);
+                }
+                $card.remove();
+                updateArchivedColumnState();
+                $cardModal.removeClass('active');
+            });
+    });
+
+    $(document).on('click', '#card-unarchive-btn', function() {
+        var cardId = $(this).data('card-id');
+        post('/boards/' + board + '/cards/' + cardId + '/unarchive', {})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.column_id && data.html) {
+                    $('.col-cards[data-column-id="' + data.column_id + '"]').first().append(data.html);
+                }
+                $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
+                updateArchivedColumnState();
+                $cardModal.removeClass('active');
+            });
+    });
+
+    $(document).on('click', '#card-delete-btn', function() {
+        var cardId = $(this).data('card-id');
+        if (!window.confirm('Delete this archived card permanently?')) return;
+        post('/boards/' + board + '/cards/' + cardId + '/delete', {})
+            .then(function(r) { return r.json(); })
+            .then(function() {
+                $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
+                updateArchivedColumnState();
                 $cardModal.removeClass('active');
             });
     });

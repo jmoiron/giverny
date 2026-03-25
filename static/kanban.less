@@ -394,6 +394,23 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
     &:hover { color: var(--orchid); }
 }
 
+.archived-toggle-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cyan);
+    font-size: 1rem;
+    padding: 0.2rem 0.4rem;
+    line-height: 1;
+    text-decoration: none;
+    border-radius: 4px;
+
+    &:hover {
+        color: var(--cyan);
+        background: color-mix(in srgb, var(--cyan) 12%, transparent);
+    }
+}
+
 .add-column-form {
     .form-inputs();
     background: var(--surface);
@@ -444,6 +461,28 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
         flex-wrap: wrap;
         gap: 0.35rem;
         margin-top: 0.5rem;
+    }
+}
+
+.archived-column {
+    border-style: dashed;
+
+    &.is-hidden {
+        display: none;
+    }
+
+    .archived-column-icon {
+        color: var(--cyan);
+    }
+}
+
+.archived-empty-state {
+    color: var(--muted);
+    font-size: 0.88rem;
+    padding: 0.5rem;
+
+    &.is-hidden {
+        display: none;
     }
 }
 
@@ -694,6 +733,20 @@ body.drag-column .board-columns * {
 
         &.danger-btn {
             color: var(--red);
+        }
+
+        &.cyan-btn {
+            color: var(--cyan);
+        }
+
+        &.danger-fill-btn {
+            background: var(--red);
+            color: #fff;
+
+            &:hover {
+                background: var(--red);
+                filter: brightness(1.05);
+            }
         }
     }
 

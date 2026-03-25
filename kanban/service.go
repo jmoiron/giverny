@@ -338,6 +338,21 @@ func (s *CardService) ListByBoard(boardID int64) ([]*Card, error) {
 	return cards, err
 }
 
+func (s *CardService) ListArchivedByBoard(boardID int64) ([]*Card, error) {
+	var cards []*Card
+	err := s.db.Select(&cards,
+		`SELECT * FROM card WHERE board_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC, id DESC`,
+		boardID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachLabelsByBoard(cards, boardID); err != nil {
+		return nil, err
+	}
+	return cards, nil
+}
+
 func (s *CardService) Update(id int64, title, content, color string, labelIDs []int64) error {
 	rendered := mtr.RenderMarkdown(content)
 	return db.With(s.db, func(tx *sqlx.Tx) error {
@@ -445,6 +460,46 @@ func (s *CardService) Move(id, columnID int64, position int) error {
 func (s *CardService) Archive(id int64) error {
 	_, err := s.db.Exec(`UPDATE card SET archived_at=datetime('now'), updated_at=datetime('now') WHERE id=?`, id)
 	return err
+}
+
+func (s *CardService) Delete(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM card WHERE id=?`, id)
+	return err
+}
+
+func (s *CardService) DeleteArchivedByBoard(boardID int64) error {
+	_, err := s.db.Exec(`DELETE FROM card WHERE board_id=? AND archived_at IS NOT NULL`, boardID)
+	return err
+}
+
+func (s *CardService) Unarchive(id int64) (*Card, error) {
+	var card Card
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		if err := tx.Get(&card, `SELECT * FROM card WHERE id=?`, id); err != nil {
+			return err
+		}
+		var firstColumnID int64
+		if err := tx.Get(&firstColumnID, `SELECT id FROM board_column WHERE board_id=? ORDER BY position, id LIMIT 1`, card.BoardID); err != nil {
+			return err
+		}
+		var maxPos int
+		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM card WHERE column_id=? AND archived_at IS NULL`, firstColumnID)
+		if _, err := tx.Exec(
+			`UPDATE card SET archived_at=NULL, column_id=?, position=?, updated_at=datetime('now') WHERE id=?`,
+			firstColumnID, maxPos+1, id,
+		); err != nil {
+			return err
+		}
+		return tx.Get(&card, `SELECT * FROM card WHERE id=?`, id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	card.Labels, err = s.labelsForCard(id)
+	if err != nil {
+		return nil, err
+	}
+	return &card, nil
 }
 
 func (s *CardService) Reorder(columnID int64, ids []int64) error {
