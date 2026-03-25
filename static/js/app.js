@@ -39,6 +39,15 @@ $(function() {
         }
     });
 
+    $(document).on('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if ($modal.hasClass('active')) {
+            $modal.removeClass('active');
+            pendingForm = null;
+        }
+        $('.modal-overlay.active').removeClass('active');
+    });
+
     $(document).on('click', '.copy-btn', function() {
         var text = $(this).data('copy');
         navigator.clipboard.writeText(text).then(() => {

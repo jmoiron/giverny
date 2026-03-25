@@ -132,6 +132,9 @@
 .fa-pen {
   --fa: "\f304";
 }
+.fa-pen-to-square {
+  --fa: "\f044";
+}
 .fa-plus {
   --fa: "\+";
 }

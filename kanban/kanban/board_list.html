@@ -1,0 +1,36 @@
+<div class="boards-wrap">
+    <h2>boards</h2>
+    {{if .isAdmin}}
+    <div class="create-board-section">
+        <form class="create-board-form" method="post" action="/boards/">
+            <input type="text" name="name" placeholder="board name" required>
+            <select name="visibility">
+                <option value="private">private</option>
+                <option value="open">open</option>
+                <option value="public">public</option>
+            </select>
+            <button type="submit">create</button>
+        </form>
+    </div>
+    {{end}}
+    {{if .boards}}
+    <div class="boards-grid">
+        {{range .boards}}
+        <div class="board-card-wrap">
+            <span class="visibility-badge board-visibility-badge">{{.Visibility}}</span>
+            <a href="/boards/{{.Slug}}" class="board-card">
+                <h3>{{.Name}}</h3>
+                {{if .Description}}<p>{{.Description}}</p>{{end}}
+            </a>
+            {{if $.isAdmin}}
+            <a href="/boards/{{.Slug}}/edit" class="board-edit-link" title="edit board">
+                <i class="fa-solid fa-pen-to-square"></i>
+            </a>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <p class="empty-state">no boards yet{{if .isAdmin}} — create one above{{end}}</p>
+    {{end}}
+</div>

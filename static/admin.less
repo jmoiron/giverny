@@ -1,6 +1,36 @@
 .admin-wrap {
     .form-inputs();
 
+    form:not(.invite-form):not(.role-form) {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        row-gap: 0.9rem;
+        max-width: 480px;
+        margin: 0 auto;
+
+        > div {
+            display: grid;
+            grid-column: 1 / -1;
+            grid-template-columns: subgrid;
+            align-items: baseline;
+            column-gap: 1rem;
+        }
+
+        input, textarea, select { width: 100%; }
+        textarea { resize: vertical; }
+
+        .login {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 1rem;
+            padding-top: 0.25rem;
+
+            a { color: var(--muted); font-size: 0.9rem; text-decoration: none; &:hover { color: var(--text); } }
+        }
+    }
+
     .row-actions {
         display: flex;
         align-items: center;

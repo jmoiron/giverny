@@ -48,8 +48,9 @@ type options struct {
 	Debug      bool
 	Version    bool
 
-	AddUser string
-	Invite  string
+	AddUser      string
+	Invite       string
+	AddGravatars bool
 
 	GenConf      string
 	RegenSecrets bool
@@ -147,9 +148,11 @@ func main() {
 	// smtp app manages email config and sending
 	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
+	kanbanApp := kanban.NewApp(dbh)
+
 	// apps is the ordered list of sub-applications. Auth must come first
 	// since other tables reference user(id).
-	apps := []app.App{authApp, gauthApp, smtpApp}
+	apps := []app.App{authApp, gauthApp, smtpApp, kanbanApp}
 
 	reg := mtr.NewRegistry()
 	reg.AddBaseFS("base", "templates/base.html", templates)
@@ -159,9 +162,6 @@ func main() {
 		must(a.Migrate(), "migrating app", "name", a.Name())
 		a.Register(reg)
 	}
-
-	// giverny-specific migrations (depend on monet's user table)
-	must(migrateGiverny(dbh), "running giverny migrations")
 
 	if runUtil(&opts, gauthApp, smtpApp, cfg.BaseURL) {
 		return
@@ -253,43 +253,13 @@ func parseOpts(opts *options) {
 	pflag.BoolVarP(&opts.Debug, "debug", "d", false, "enable debug mode")
 	pflag.BoolVarP(&opts.Version, "version", "v", false, "show version info")
 	pflag.StringVar(&opts.AddUser, "add-user", "", "create a super-admin user with the given username (email = username, prompted for password)")
+	pflag.BoolVar(&opts.AddGravatars, "add-gravatars", false, "look up and set gravatar URIs for users with no profile image")
 	pflag.StringVar(&opts.Invite, "invite", "", "send an invitation email to the given address")
 	pflag.StringVar(&opts.GenConf, "gen-conf", "", "generate a config file with random secrets at the given path")
 	pflag.BoolVar(&opts.RegenSecrets, "regen-secrets", false, "regenerate SessionSecret and Secret in the config file (requires --config)")
 	pflag.BoolVar(&opts.ShowMigration, "migrations", false, "show migration state for each app")
 	pflag.StringVar(&opts.Downgrade, "downgrade", "", "downgrade a named app by one migration version")
 	pflag.Parse()
-}
-
-// givernyMigrations returns all giverny-specific monarch migration sets in
-// dependency order. These run after monet's apps have migrated (creating the
-// base user table).
-func givernyMigrations() []monarch.Set {
-	return []monarch.Set{
-		kanban.BoardMigrations,
-		kanban.ColumnMigrations,
-		kanban.CardMigrations,
-		kanban.LabelMigrations,
-		kanban.ChecklistMigrations,
-		kanban.CommentMigrations,
-		kanban.AttachmentMigrations,
-		kanban.ActivityMigrations,
-		kanban.CardFTSMigrations,
-		kanban.CommentFTSMigrations,
-	}
-}
-
-func migrateGiverny(dbh db.DB) error {
-	m, err := monarch.NewManager(dbh)
-	if err != nil {
-		return err
-	}
-	for _, s := range givernyMigrations() {
-		if err := m.Upgrade(s); err != nil {
-			return fmt.Errorf("%s: %w", s.Name, err)
-		}
-	}
-	return nil
 }
 
 // randomHex returns n cryptographically random bytes encoded as a hex string.
@@ -354,6 +324,11 @@ func runUtil(opts *options, gauthApp *gauth.App, smtpApp *gsmtp.App, baseURL str
 			slog.Error("sending invite", "err", err)
 			os.Exit(1)
 		}
+	case opts.AddGravatars:
+		if err := addGravatars(gauthApp.Users()); err != nil {
+			slog.Error("adding gravatars", "err", err)
+			os.Exit(1)
+		}
 	default:
 		return false
 	}
@@ -403,5 +378,27 @@ func addUser(username string, users *gauth.UserProfileService) error {
 		return err
 	}
 
-	return users.CreateUser(username, username, string(passwordBytes), gauth.RoleSuperAdmin)
+	return users.CreateUser(username, username, string(passwordBytes), gauth.RoleSuperAdmin, gauth.GravatarURI(username))
+}
+
+func addGravatars(users *gauth.UserProfileService) error {
+	all, err := users.List()
+	if err != nil {
+		return err
+	}
+	for _, u := range all {
+		if u.ProfileImageURI != "" {
+			continue
+		}
+		uri := gauth.GravatarURI(u.Email)
+		if uri == "" {
+			fmt.Printf("no gravatar: %s\n", u.Email)
+			continue
+		}
+		if err := users.SetProfileImageURI(u.ID, uri); err != nil {
+			return fmt.Errorf("setting gravatar for %s: %w", u.Email, err)
+		}
+		fmt.Printf("set gravatar: %s\n", u.Email)
+	}
+	return nil
 }

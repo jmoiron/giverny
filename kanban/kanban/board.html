@@ -1,0 +1,65 @@
+<div class="board-outer" id="board-outer" data-slug="{{.board.Slug}}">
+    <div class="board-header">
+        <h2>{{.board.Name}}</h2>
+        <span class="visibility-badge">{{.board.Visibility}}</span>
+        {{if .board.Description}}<span class="board-desc">{{.board.Description}}</span>{{end}}
+    </div>
+    <div class="board-columns">
+        {{range .columns}}
+        <div class="board-column" data-id="{{.ID}}">
+            <div class="col-header">
+                <span class="col-name">{{.Name}}</span>
+                {{if .WIPLimit}}<span class="wip-badge">{{.WIPLimit}}</span>{{end}}
+                {{if $.isAdmin}}
+                <form id="delete-col-{{.ID}}" method="post" action="/boards/{{$.board.Slug}}/columns/{{.ID}}/delete"></form>
+                <i class="fa-solid fa-circle-xmark col-delete-icon"
+                   data-submit="delete-col-{{.ID}}"
+                   data-confirm="Delete column '{{.Name}}'? Cards in this column will also be deleted."
+                   title="delete column"></i>
+                {{end}}
+            </div>
+            <div class="col-cards" data-column-id="{{.ID}}">
+                {{range .Cards}}
+                <div class="kanban-card" data-id="{{.ID}}">
+                    <div class="card-title">{{.Title}}</div>
+                </div>
+                {{end}}
+            </div>
+            <div class="col-footer">
+                <button class="add-card-btn" data-col="{{.ID}}">
+                    <i class="fa-solid fa-plus"></i> add card
+                </button>
+                <form class="add-card-form" data-col="{{.ID}}" data-board="{{$.board.Slug}}" style="display:none">
+                    <input type="text" name="title" placeholder="card title" required>
+                    <div class="add-card-actions">
+                        <button type="button" class="btn-cancel">cancel</button>
+                        <button type="submit">add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {{end}}
+        {{if .isAdmin}}
+        <div class="add-column-wrap">
+            <button class="add-column-btn" id="add-column-btn" title="add column">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+            <form class="add-column-form" method="post" action="/boards/{{.board.Slug}}/columns" style="display:none">
+                <input type="text" name="name" placeholder="column name" required>
+                <div class="add-card-actions">
+                    <button type="button" class="btn-cancel">cancel</button>
+                    <button type="submit">add</button>
+                </div>
+            </form>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<div id="card-modal" class="modal-overlay">
+    <div class="modal card-modal-inner">
+        <!-- loaded via AJAX -->
+    </div>
+</div>
+
+<script src="/static/js/kanban.js" defer></script>

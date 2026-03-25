@@ -31,7 +31,10 @@
                 {{end}}
                 <div class="nav-right">
                     {{if .user}}
-                    <span class="user">{{.user.Username}}</span>
+                    <span class="user">
+                        {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{end}}
+                        {{.user.Username}}
+                    </span>
                     <a href="/logout/">logout</a>
                     {{else}}
                     <a href="/login/">login</a>
@@ -40,7 +43,7 @@
                 </div>
             </nav>
         </header>
-        <main>
+        <main{{if .mainClass}} class="{{.mainClass}}"{{end}}>
             {{.body}}
         </main>
         <div id="confirm-modal" class="modal-overlay">

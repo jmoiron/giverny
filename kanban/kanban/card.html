@@ -1,0 +1,24 @@
+<div class="card-detail" data-card-id="{{.card.ID}}">
+    <button class="modal-close" id="card-modal-close" type="button">
+        <i class="fa-solid fa-xmark"></i>
+    </button>
+    <form id="card-detail-form" data-id="{{.card.ID}}">
+        <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
+        <textarea class="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
+        <div class="card-meta">
+            <div class="move-row">
+                <label>column</label>
+                <select name="column_id" id="card-move-select">
+                    {{range .columns}}
+                    <option value="{{.ID}}"{{if eq .ID $.card.ColumnID}} selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div class="card-actions">
+            <button type="submit">save</button>
+            <div class="spacer"></div>
+            <button type="button" class="danger-btn" id="card-archive-btn" data-card-id="{{.card.ID}}">archive</button>
+        </div>
+    </form>
+</div>

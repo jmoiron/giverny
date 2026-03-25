@@ -15,12 +15,13 @@ const bcryptCost = bcrypt.DefaultCost
 
 // User is the combined view of monet's user row joined with giverny's user_profile row.
 type User struct {
-	ID          int64      `db:"id"`
-	Username    string     `db:"username"`
-	Email       string     `db:"email"`
-	Role        string     `db:"role"`
-	CreatedAt   time.Time  `db:"created_at"`
-	LastLoginAt *time.Time `db:"last_login_at"`
+	ID              int64      `db:"id"`
+	Username        string     `db:"username"`
+	Email           string     `db:"email"`
+	Role            string     `db:"role"`
+	ProfileImageURI string     `db:"profile_image_uri"`
+	CreatedAt       time.Time  `db:"created_at"`
+	LastLoginAt     *time.Time `db:"last_login_at"`
 }
 
 func (u *User) IsAdmin() bool {
@@ -44,7 +45,7 @@ func NewUserProfileService(dbh db.DB) *UserProfileService {
 // transaction. We duplicate the bcrypt logic here rather than calling monet's
 // UserService.CreateUser because that method uses its own db handle and cannot
 // participate in our transaction.
-func (s *UserProfileService) CreateUser(username, email, password, role string) error {
+func (s *UserProfileService) CreateUser(username, email, password, role, profileImageURI string) error {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return err
@@ -58,12 +59,12 @@ func (s *UserProfileService) CreateUser(username, email, password, role string) 
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(`INSERT INTO user_profile (user_id, email, role) VALUES (?, ?, ?)`, userID, email, role)
+		_, err = tx.Exec(`INSERT INTO user_profile (user_id, email, role, profile_image_uri) VALUES (?, ?, ?, ?)`, userID, email, role, profileImageURI)
 		return err
 	})
 }
 
-const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.created_at, p.last_login_at
+const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.created_at, p.last_login_at
 	FROM user u JOIN user_profile p ON p.user_id = u.id`
 
 func (s *UserProfileService) GetByUsername(username string) (*User, error) {
@@ -102,6 +103,11 @@ func (s *UserProfileService) DeleteUser(userID int64) error {
 
 func (s *UserProfileService) SetRole(userID int64, role string) error {
 	_, err := s.db.Exec(`UPDATE user_profile SET role=? WHERE user_id=?`, role, userID)
+	return err
+}
+
+func (s *UserProfileService) SetProfileImageURI(userID int64, uri string) error {
+	_, err := s.db.Exec(`UPDATE user_profile SET profile_image_uri=? WHERE user_id=?`, uri, userID)
 	return err
 }
 

@@ -11,6 +11,7 @@ fa-solid fa-plus
 fa-solid fa-xmark
 fa-solid fa-check
 fa-solid fa-pen
+fa-solid fa-pen-to-square
 fa-solid fa-trash
 fa-solid fa-grip-vertical
 fa-solid fa-ellipsis-vertical

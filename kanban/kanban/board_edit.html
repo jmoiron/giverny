@@ -1,0 +1,39 @@
+<div class="admin-wrap board-edit-wrap">
+    <div class="board-edit-header">
+        <h2>edit board</h2>
+        <form id="delete-board-form" method="post" action="/boards/{{.board.Slug}}/delete" style="display:none"></form>
+        <button type="button" class="danger"
+                data-submit="delete-board-form"
+                data-confirm="Delete board '{{.board.Name}}'? This will remove all columns and cards and cannot be undone.">
+            <i class="fa-solid fa-circle-xmark"></i> delete
+        </button>
+    </div>
+    <form method="post" action="/boards/{{.board.Slug}}/edit">
+        <div>
+            <label for="name">name</label>
+            <input type="text" id="name" name="name" value="{{.board.Name}}" required>
+        </div>
+        <div>
+            <label for="slug">slug</label>
+            <input type="text" id="slug" name="slug" value="{{.board.Slug}}" required>
+        </div>
+        <div>
+            <label for="description">description</label>
+            <textarea id="description" name="description" rows="3">{{.board.Description}}</textarea>
+        </div>
+        <div>
+            <label for="visibility">visibility</label>
+            <select id="visibility" name="visibility">
+                <option value="private"{{if eq .board.Visibility "private"}} selected{{end}}>private</option>
+                <option value="open"{{if eq .board.Visibility "open"}} selected{{end}}>open</option>
+                <option value="public"{{if eq .board.Visibility "public"}} selected{{end}}>public</option>
+            </select>
+        </div>
+        <div class="login">
+            <a href="/boards/{{.board.Slug}}">cancel</a>
+            <button type="submit">
+                <i class="fa-solid fa-floppy-disk"></i> save
+            </button>
+        </div>
+    </form>
+</div>

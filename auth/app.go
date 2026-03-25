@@ -134,7 +134,7 @@ func (a *App) handleInviteSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.users.CreateUser(inv.Email, inv.Email, password, RoleReadonly); err != nil {
+	if err := a.users.CreateUser(inv.Email, inv.Email, password, RoleReadonly, GravatarURI(inv.Email)); err != nil {
 		slog.Error("creating user from invite", "err", err)
 		http.Error(w, "could not create account", http.StatusInternalServerError)
 		return

@@ -1,8 +1,12 @@
+.card-shadow() { box-shadow: 3px 4px 0px rgba(0,0,0,0.18); }
+.card-shadow-hover() { box-shadow: 4px 5px 0px rgba(0,0,0,0.22); }
+
 .form-inputs() {
     input[type=text],
     input[type=password],
     input[type=email],
     input[type=number],
+    textarea,
     select {
         padding: 0.5rem 0.6rem;
         border: 1px solid var(--border);
@@ -28,5 +32,13 @@
         cursor: pointer;
 
         &:hover { background: var(--sky); }
+    }
+
+    button.btn-cancel,
+    button#confirm-cancel {
+        background: none;
+        border: none;
+        color: var(--muted);
+        &:hover { background: none; color: var(--text); }
     }
 }
