@@ -102,6 +102,9 @@
 .fa-chevron-right {
   --fa: "\f054";
 }
+.fa-chevron-up {
+  --fa: "\f077";
+}
 .fa-circle-info {
   --fa: "\f05a";
 }

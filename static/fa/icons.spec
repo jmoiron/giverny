@@ -26,6 +26,7 @@ fa-solid fa-square
 fa-regular fa-square
 fa-solid fa-moon
 fa-solid fa-chevron-down
+fa-solid fa-chevron-up
 fa-solid fa-chevron-right
 fa-solid fa-arrow-right
 fa-solid fa-tag

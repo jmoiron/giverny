@@ -7,6 +7,7 @@
     --cyan:        #00CCF8;
     --red:         #D92645;
     --green:       #4CAF50;
+    --orange:      #F2A65A;
 
     /* theme */
     --bg:          #f8f8f8;
@@ -24,6 +25,29 @@
     --accent-soft: var(--lavender);
     --label-light-fg: #ffffff;
     --label-dark-fg:  #111111;
+}
+
+.hljs {
+    color: var(--text);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-property {
+    color: var(--lavender);
+}
+
+.hljs-string {
+    color: var(--green);
+}
+
+.hljs-number,
+.hljs-literal {
+    color: var(--orange);
+}
+
+.hljs-punctuation {
+    color: var(--muted);
 }
 
 html.dark {

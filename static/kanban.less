@@ -167,14 +167,47 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
 }
 
 .ws-event-entry {
+    border-bottom: 1px solid var(--border);
+    &:last-child { border-bottom: none; }
+}
+
+.ws-event-header {
     padding: 0.35rem 0.6rem;
     display: flex;
     gap: 0.5rem;
     border-bottom: 1px solid var(--border);
-    &:last-child { border-bottom: none; }
+    cursor: pointer;
+
+    &:hover {
+        background: var(--hover-bg);
+    }
 
     .ws-event-type { color: var(--text); }
     .ws-event-time { margin-left: auto; font-size: 0.75rem; }
+    .ws-event-toggle { color: var(--muted); font-size: 0.72rem; }
+}
+
+.ws-event-entry:last-child .ws-event-header {
+    border-bottom: none;
+}
+
+.ws-event-entry.expanded .ws-event-header {
+    border-bottom-color: var(--border);
+}
+
+.ws-event-payload {
+    padding: 0.35rem 0.6rem 0.6rem;
+
+    pre {
+        margin: 0;
+        overflow-x: auto;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.6rem 0.7rem;
+        font-size: 0.75rem;
+        line-height: 1.45;
+    }
 }
 
 .board-columns {

@@ -657,6 +657,7 @@ $(function() {
     var $wsEventLog  = $('#ws-event-log');
     var wsEvents     = [];
     var MAX_EVENTS   = 5;
+    var wsEventSeq   = 0;
 
     function pad(n) { return n < 10 ? '0' + n : n; }
 
@@ -668,12 +669,25 @@ $(function() {
         var html = '';
         for (var i = wsEvents.length - 1; i >= 0; i--) {
             var ev = wsEvents[i];
-            html += '<div class="ws-event-entry">' +
+            var expanded = ev.expanded ? ' expanded' : '';
+            var toggleIcon = ev.expanded ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down';
+            html += '<div class="ws-event-entry' + expanded + '" data-ws-event-id="' + ev.id + '">' +
+                '<div class="ws-event-header">' +
+                '<i class="' + toggleIcon + ' ws-event-toggle"></i>' +
                 '<span class="ws-event-type">' + ev.type + '</span>' +
                 '<span class="ws-event-time">' + ev.time + '</span>' +
+                '</div>' +
+                '<div class="ws-event-payload"' + (ev.expanded ? '' : ' style="display:none"') + '>' +
+                '<pre><code class="language-json">' + ev.json + '</code></pre>' +
+                '</div>' +
                 '</div>';
         }
         $wsEventLog.html(html);
+        if (window.hljs) {
+            $wsEventLog.find('code.language-json').each(function() {
+                window.hljs.highlightElement(this);
+            });
+        }
     }
 
     function flashIndicator() {
@@ -694,6 +708,22 @@ $(function() {
         var open = isShown($wsEventLog);
         $wsEventLog[0].style.display = open ? 'none' : 'block';
         if (!open) renderEventLog();
+    });
+
+    $('#ws-status-box').on('click', function(event) {
+        event.stopPropagation();
+    });
+
+    $wsEventLog.on('click', '.ws-event-header', function(event) {
+        event.stopPropagation();
+        var id = Number($(this).closest('.ws-event-entry').data('ws-event-id'));
+        for (var i = 0; i < wsEvents.length; i++) {
+            if (wsEvents[i].id === id) {
+                wsEvents[i].expanded = !wsEvents[i].expanded;
+                break;
+            }
+        }
+        renderEventLog();
     });
 
     // Close if clicking outside the status box.
@@ -721,7 +751,13 @@ $(function() {
         applyBoardEvent(evt);
         var now = new Date();
         var time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        wsEvents.push({ type: evt.type || 'message', time: time });
+        wsEvents.push({
+            id: ++wsEventSeq,
+            type: evt.type || 'message',
+            time: time,
+            json: $('<div>').text(JSON.stringify(evt, null, 2)).html(),
+            expanded: false
+        });
         if (wsEvents.length > MAX_EVENTS) wsEvents.shift();
         if (isShown($wsEventLog)) renderEventLog();
         flashIndicator();
