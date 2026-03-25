@@ -159,16 +159,28 @@ func (s *BoardService) Delete(id int64) error {
 	return err
 }
 
+var ErrDoneColumnRequired = errors.New("board requires a done column")
+
 // ColumnService methods
 
-func (s *ColumnService) Create(boardID int64, name, color string) (*Column, error) {
+func (s *ColumnService) Create(boardID int64, name, color string, done, late bool) (*Column, error) {
 	var col Column
 	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		if done {
+			if _, err := tx.Exec(`UPDATE board_column SET done=0 WHERE board_id=?`, boardID); err != nil {
+				return err
+			}
+		}
+		if late {
+			if _, err := tx.Exec(`UPDATE board_column SET late=0 WHERE board_id=?`, boardID); err != nil {
+				return err
+			}
+		}
 		var maxPos int
 		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM board_column WHERE board_id=?`, boardID)
 		res, err := tx.Exec(
-			`INSERT INTO board_column (board_id, name, position, color) VALUES (?, ?, ?, ?)`,
-			boardID, name, maxPos+1, strings.TrimSpace(color),
+			`INSERT INTO board_column (board_id, name, position, color, done, late) VALUES (?, ?, ?, ?, ?, ?)`,
+			boardID, name, maxPos+1, strings.TrimSpace(color), done, late,
 		)
 		if err != nil {
 			return err
@@ -182,20 +194,64 @@ func (s *ColumnService) Create(boardID int64, name, color string) (*Column, erro
 	return &col, err
 }
 
+func (s *ColumnService) Get(id int64) (*Column, error) {
+	var col Column
+	err := s.db.Get(&col, `SELECT * FROM board_column WHERE id=?`, id)
+	if err != nil {
+		return nil, err
+	}
+	return &col, nil
+}
+
 func (s *ColumnService) ListByBoard(boardID int64) ([]*Column, error) {
 	var cols []*Column
 	err := s.db.Select(&cols, `SELECT * FROM board_column WHERE board_id=? ORDER BY position, id`, boardID)
 	return cols, err
 }
 
-func (s *ColumnService) Update(id int64, name string, wipLimit int, color string) error {
-	_, err := s.db.Exec(`UPDATE board_column SET name=?, wip_limit=?, color=? WHERE id=?`, name, wipLimit, strings.TrimSpace(color), id)
-	return err
+func (s *ColumnService) Update(id int64, name string, wipLimit int, color string, done, late bool) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		var current Column
+		if err := tx.Get(&current, `SELECT * FROM board_column WHERE id=?`, id); err != nil {
+			return err
+		}
+		if !done {
+			var otherDoneCount int
+			if err := tx.Get(&otherDoneCount, `SELECT COUNT(*) FROM board_column WHERE board_id=? AND done=1 AND id<>?`, current.BoardID, id); err != nil {
+				return err
+			}
+			if current.Done && otherDoneCount == 0 {
+				return ErrDoneColumnRequired
+			}
+		}
+		if done {
+			if _, err := tx.Exec(`UPDATE board_column SET done=0 WHERE board_id=? AND id<>?`, current.BoardID, id); err != nil {
+				return err
+			}
+		}
+		if late {
+			if _, err := tx.Exec(`UPDATE board_column SET late=0 WHERE board_id=? AND id<>?`, current.BoardID, id); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(`UPDATE board_column SET name=?, wip_limit=?, color=?, done=?, late=? WHERE id=?`,
+			name, wipLimit, strings.TrimSpace(color), done, late, id)
+		return err
+	})
 }
 
 func (s *ColumnService) Delete(id int64) error {
-	_, err := s.db.Exec(`DELETE FROM board_column WHERE id=?`, id)
-	return err
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		var current Column
+		if err := tx.Get(&current, `SELECT * FROM board_column WHERE id=?`, id); err != nil {
+			return err
+		}
+		if current.Done {
+			return ErrDoneColumnRequired
+		}
+		_, err := tx.Exec(`DELETE FROM board_column WHERE id=?`, id)
+		return err
+	})
 }
 
 func (s *ColumnService) Reorder(boardID int64, ids []int64) error {
@@ -213,6 +269,24 @@ func (s *ColumnService) IDsByBoard(boardID int64) ([]int64, error) {
 	var ids []int64
 	err := s.db.Select(&ids, `SELECT id FROM board_column WHERE board_id=? ORDER BY position, id`, boardID)
 	return ids, err
+}
+
+func (s *ColumnService) DoneByBoard(boardID int64) (*Column, error) {
+	var col Column
+	err := s.db.Get(&col, `SELECT * FROM board_column WHERE board_id=? AND done=1 ORDER BY id LIMIT 1`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return &col, nil
+}
+
+func (s *ColumnService) LateByBoard(boardID int64) (*Column, error) {
+	var col Column
+	err := s.db.Get(&col, `SELECT * FROM board_column WHERE board_id=? AND late=1 ORDER BY id LIMIT 1`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	return &col, nil
 }
 
 // CardService methods
@@ -383,6 +457,50 @@ func (s *CardService) IDsByColumn(columnID int64) ([]int64, error) {
 	var ids []int64
 	err := s.db.Select(&ids, `SELECT id FROM card WHERE column_id=? AND archived_at IS NULL ORDER BY position, id`, columnID)
 	return ids, err
+}
+
+func (s *CardService) MarkDone(cardID int64) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		var card Card
+		if err := tx.Get(&card, `SELECT * FROM card WHERE id=?`, cardID); err != nil {
+			return err
+		}
+		var doneColumnID int64
+		if err := tx.Get(&doneColumnID, `SELECT id FROM board_column WHERE board_id=? AND done=1 ORDER BY id LIMIT 1`, card.BoardID); err != nil {
+			return err
+		}
+		if card.ColumnID == doneColumnID {
+			return nil
+		}
+		var maxPos int
+		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM card WHERE column_id=? AND archived_at IS NULL`, doneColumnID)
+		_, err := tx.Exec(`UPDATE card SET column_id=?, position=?, updated_at=datetime('now') WHERE id=?`, doneColumnID, maxPos+1, cardID)
+		return err
+	})
+}
+
+func (s *CardService) MoveOverdueToLate(boardID int64, now time.Time) (int64, error) {
+	var moved int64
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		var lateColumnID int64
+		if err := tx.Get(&lateColumnID, `SELECT id FROM board_column WHERE board_id=? AND late=1 ORDER BY id LIMIT 1`, boardID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		res, err := tx.Exec(`
+			UPDATE card
+			SET column_id=?, updated_at=datetime('now')
+			WHERE board_id=? AND archived_at IS NULL AND due_date IS NOT NULL AND due_date<? AND column_id<>?
+		`, lateColumnID, boardID, now.UTC(), lateColumnID)
+		if err != nil {
+			return err
+		}
+		moved, _ = res.RowsAffected()
+		return nil
+	})
+	return moved, err
 }
 
 func orderedCardIDsTx(tx *sqlx.Tx, columnID, excludeID int64) ([]int64, error) {

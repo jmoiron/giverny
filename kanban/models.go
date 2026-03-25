@@ -31,6 +31,8 @@ type Column struct {
 	Position  int       `db:"position"`
 	WIPLimit  int       `db:"wip_limit"`
 	Color     string    `db:"color"`
+	Done      bool      `db:"done"`
+	Late      bool      `db:"late"`
 	CreatedAt time.Time `db:"created_at"`
 }
 
@@ -150,6 +152,18 @@ var ColumnMigrations = monarch.Set{
 		},
 		{
 			Up:   `ALTER TABLE board_column ADD COLUMN color TEXT NOT NULL DEFAULT '';`,
+			Down: ``,
+		},
+		{
+			Up:   `ALTER TABLE board_column ADD COLUMN done INTEGER NOT NULL DEFAULT 0;`,
+			Down: ``,
+		},
+		{
+			Up:   `UPDATE board_column SET done=1 WHERE lower(trim(name))='done';`,
+			Down: ``,
+		},
+		{
+			Up:   `ALTER TABLE board_column ADD COLUMN late INTEGER NOT NULL DEFAULT 0;`,
 			Down: ``,
 		},
 	},

@@ -147,6 +147,7 @@
     color: var(--muted);
     transition: color 1s ease;
 
+    &.connecting { color: var(--orange); }
     &.connected { color: var(--green); }
     &.error      { color: var(--red); }
     &.flash      { color: var(--lavender); transition: color 0s; }
@@ -575,6 +576,12 @@ body.drag-column .board-columns * {
         position: relative;
     }
 
+    .modal.column-modal-inner {
+        width: min(92vw, 520px);
+        max-width: 520px;
+        position: relative;
+    }
+
     .modal-close {
         display: inline-flex;
         align-items: center;
@@ -591,6 +598,40 @@ body.drag-column .board-columns * {
 
         &:hover { color: var(--text); background: none; }
     }
+}
+
+.column-modal-body {
+    .form-inputs();
+
+    .card-section {
+        margin-bottom: 1.35rem;
+    }
+
+    .card-section-label {
+        font-size: 0.78rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.35rem;
+    }
+
+    .column-setting-note {
+        color: var(--muted);
+        font-size: 0.84rem;
+        margin: 0.2rem 0 1rem;
+    }
+
+    .card-actions {
+        margin-top: 0.35rem;
+    }
+}
+
+.column-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.85rem;
+    color: var(--text);
 }
 
 .card-detail {
@@ -649,6 +690,10 @@ body.drag-column .board-columns * {
         &:hover {
             background: var(--hover-bg);
             filter: brightness(1.04);
+        }
+
+        &.danger-btn {
+            color: var(--red);
         }
     }
 

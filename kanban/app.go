@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -265,9 +266,17 @@ func (a *App) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 		app.Http500("creating board", w, err)
 		return
 	}
-	for _, colName := range []string{"Todo", "In Progress", "Done"} {
-		if _, err := a.columns.Create(board.ID, colName, ""); err != nil {
-			slog.Error("creating default column", "board", board.Slug, "name", colName, "err", err)
+	for _, spec := range []struct {
+		Name string
+		Done bool
+		Late bool
+	}{
+		{Name: "Todo"},
+		{Name: "In Progress"},
+		{Name: "Done", Done: true},
+	} {
+		if _, err := a.columns.Create(board.ID, spec.Name, "", spec.Done, spec.Late); err != nil {
+			slog.Error("creating default column", "board", board.Slug, "name", spec.Name, "err", err)
 		}
 	}
 	http.Redirect(w, r, "/boards/"+board.Slug, http.StatusSeeOther)
@@ -398,7 +407,9 @@ func (a *App) handleCreateColumn(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.FormValue("name")
 	color := r.FormValue("color")
-	if _, err := a.columns.Create(board.ID, name, color); err != nil {
+	done := r.FormValue("done") == "1"
+	late := r.FormValue("late") == "1"
+	if _, err := a.columns.Create(board.ID, name, color, done, late); err != nil {
 		app.Http500("creating column", w, err)
 		return
 	}
@@ -419,6 +430,10 @@ func (a *App) handleDeleteColumn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.columns.Delete(colID); err != nil {
+		if errors.Is(err, ErrDoneColumnRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		app.Http500("deleting column", w, err)
 		return
 	}
@@ -432,6 +447,11 @@ func (a *App) handleEditColumn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := chi.URLParam(r, "slug")
+	board, err := a.boards.GetBySlug(slug)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	colID, err := parseID(chi.URLParam(r, "colID"))
 	if err != nil {
 		http.Error(w, "invalid column id", http.StatusBadRequest)
@@ -454,9 +474,32 @@ func (a *App) handleEditColumn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	color := r.FormValue("color")
-	if err := a.columns.Update(colID, name, wipLimit, color); err != nil {
+	done := r.FormValue("done") == "1"
+	late := r.FormValue("late") == "1"
+	if err := a.columns.Update(colID, name, wipLimit, color, done, late); err != nil {
+		if errors.Is(err, ErrDoneColumnRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		app.Http500("editing column", w, err)
 		return
+	}
+	cols, err := a.columns.ListByBoard(board.ID)
+	if err == nil {
+		payload := ColumnChangedPayload{
+			Columns: make([]EventColumnPayload, 0, len(cols)),
+		}
+		for _, col := range cols {
+			payload.Columns = append(payload.Columns, EventColumnPayload{
+				ID:       col.ID,
+				Name:     col.Name,
+				WIPLimit: col.WIPLimit,
+				Color:    col.Color,
+				Done:     col.Done,
+				Late:     col.Late,
+			})
+		}
+		a.publishBoardEvent(slug, EventColumnChanged, payload)
 	}
 	http.Redirect(w, r, "/boards/"+slug, http.StatusSeeOther)
 }
@@ -521,12 +564,23 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reg := mtr.RegistryFromContext(r.Context())
-	w.Header().Set("Content-Type", "text/html")
-	if err := reg.Render(w, "kanban/card_snippet.html", mtr.Ctx{
+	var buf bytes.Buffer
+	if err := reg.Render(&buf, "kanban/card_snippet.html", mtr.Ctx{
 		"card":  card,
 		"board": slug,
 	}); err != nil {
 		slog.Error("rendering card snippet", "err", err)
+		http.Error(w, "render failed", http.StatusInternalServerError)
+		return
+	}
+	a.publishBoardEvent(slug, EventCardCreated, CardCreatedPayload{
+		CardID:   card.ID,
+		ColumnID: colID,
+		HTML:     buf.String(),
+	})
+	w.Header().Set("Content-Type", "text/html")
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		slog.Error("writing card snippet response", "err", err)
 	}
 }
 

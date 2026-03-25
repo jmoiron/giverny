@@ -500,6 +500,14 @@ $(function() {
         reorderCardsInColumn(payload.column_id, payload.card_ids);
     }
 
+    function applyCardCreated(payload) {
+        if (!payload || !payload.card_id || !payload.column_id || !payload.html) return;
+        var $container = $('.col-cards[data-column-id="' + payload.column_id + '"]').first();
+        if (!$container.length) return;
+        if ($container.find('.kanban-card[data-id="' + payload.card_id + '"]').length) return;
+        $container.append(payload.html);
+    }
+
     function applyCardMoved(payload) {
         if (!payload || !payload.from_column_id || !payload.to_column_id) return;
         moveCardToColumn(payload.card_id, payload.to_column_id);
@@ -512,8 +520,69 @@ $(function() {
         reorderColumns(payload.column_ids);
     }
 
+    function applyColumnChanged(payload) {
+        if (!payload || !payload.columns) return;
+        var columnModal = document.getElementById('column-detail-form');
+        payload.columns.forEach(function(column) {
+            if (!column || !column.id) return;
+            var $boardColumn = $('.board-column[data-id="' + column.id + '"]').first();
+            if (!$boardColumn.length) return;
+
+            $boardColumn.find('.col-name').first().text(column.name || '');
+
+            var $wipBadge = $boardColumn.find('.wip-badge').first();
+            if (column.wip_limit) {
+                if (!$wipBadge.length) {
+                    $wipBadge = $('<span class="wip-badge"></span>');
+                    var $name = $boardColumn.find('.col-name').first();
+                    if ($name.length) {
+                        $name.after($wipBadge);
+                    } else {
+                        $boardColumn.find('.col-header').first().append($wipBadge);
+                    }
+                }
+                $wipBadge.text(column.wip_limit);
+            } else if ($wipBadge.length) {
+                $wipBadge.remove();
+            }
+
+            var editForm = document.getElementById('edit-col-' + column.id);
+            if (editForm) {
+                if (editForm.elements.name) editForm.elements.name.value = column.name || '';
+                if (editForm.elements.wip_limit) editForm.elements.wip_limit.value = String(column.wip_limit || 0);
+                if (editForm.elements.color) editForm.elements.color.value = column.color || '';
+                if (editForm.elements.done) editForm.elements.done.value = column.done ? '1' : '0';
+                if (editForm.elements.late) editForm.elements.late.value = column.late ? '1' : '0';
+            }
+
+            var $editAction = $boardColumn.find('.column-edit-action').first();
+            if ($editAction.length) {
+                $editAction.attr('data-name', column.name || '');
+                $editAction.attr('data-wip', column.wip_limit || 0);
+                $editAction.attr('data-color', column.color || '');
+                $editAction.attr('data-done', column.done ? '1' : '0');
+                $editAction.attr('data-late', column.late ? '1' : '0');
+            }
+
+            if (columnModal && columnModal.action === '/boards/' + board + '/columns/' + column.id + '/edit') {
+                columnModal.elements.name.value = column.name || '';
+                columnModal.elements.wip_limit.value = String(column.wip_limit || 0);
+                columnModal.elements.color.value = column.color || '';
+                document.getElementById('column-late-input').checked = !!column.late;
+                document.getElementById('column-done-input').checked = !!column.done;
+                document.getElementById('column-late-value').value = column.late ? '1' : '0';
+                document.getElementById('column-done-value').value = column.done ? '1' : '0';
+                document.getElementById('column-done-input').disabled = !!column.done;
+                $('#column-done-note').toggle(!!column.done);
+            }
+        });
+    }
+
     function applyBoardEvent(evt) {
         switch (evt.type) {
+        case 'card.created':
+            applyCardCreated(evt.payload);
+            break;
         case 'card.reorder':
             applyCardReordered(evt.payload);
             break;
@@ -528,6 +597,9 @@ $(function() {
             break;
         case 'column.reorder':
             applyColumnReordered(evt.payload);
+            break;
+        case 'column.changed':
+            applyColumnChanged(evt.payload);
             break;
         case 'card.label.added':
             applyCardLabelAdded(evt.payload);
@@ -658,8 +730,40 @@ $(function() {
     var wsEvents     = [];
     var MAX_EVENTS   = 5;
     var wsEventSeq   = 0;
+    var ws          = null;
+    var wsState     = 'idle';
+    var reconnectTimer = null;
+    var reconnectDelay = 1000;
+    var MAX_RECONNECT_DELAY = 30000;
+    var CONNECT_TIMEOUT_MS = 5000;
+    var connectTimer = null;
+    var wsURL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/boards/' + board + '/ws';
 
     function pad(n) { return n < 10 ? '0' + n : n; }
+
+    function pushWSEvent(type, payload) {
+        var now = new Date();
+        var time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        wsEvents.push({
+            id: ++wsEventSeq,
+            type: type || 'message',
+            time: time,
+            json: $('<div>').text(JSON.stringify({
+                type: type || 'message',
+                payload: payload || {}
+            }, null, 2)).html(),
+            expanded: false
+        });
+        if (wsEvents.length > MAX_EVENTS) wsEvents.shift();
+        if (isShown($wsEventLog)) renderEventLog();
+    }
+
+    function setWSState(state) {
+        wsState = state;
+        var el = $wsIndicator[0];
+        if (!el) return;
+        el.className = 'fa-solid fa-plug ws-indicator ' + state;
+    }
 
     function renderEventLog() {
         if (wsEvents.length === 0) {
@@ -691,10 +795,13 @@ $(function() {
     }
 
     function flashIndicator() {
+        if (wsState !== 'connected') return;
         var $i = $wsIndicator;
         $i[0].className = 'fa-solid fa-plug-circle-bolt ws-indicator flash';
         setTimeout(function() {
-            $i[0].className = 'fa-solid fa-plug ws-indicator connected';
+            if (wsState === 'connected') {
+                $i[0].className = 'fa-solid fa-plug ws-indicator connected';
+            }
         }, 400);
     }
 
@@ -704,7 +811,88 @@ $(function() {
         return el.style.display !== 'none' && el.offsetParent !== null;
     }
 
+    function clearReconnectTimer() {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+    }
+
+    function clearConnectTimer() {
+        if (connectTimer) {
+            clearTimeout(connectTimer);
+            connectTimer = null;
+        }
+    }
+
+    function scheduleReconnect(delay) {
+        if (reconnectTimer || wsState === 'connecting' || wsState === 'connected') return;
+        pushWSEvent('ws.reconnect.scheduled', { delay_ms: Math.max(0, delay || 0) });
+        reconnectTimer = setTimeout(function() {
+            reconnectTimer = null;
+            connectWS();
+        }, Math.max(0, delay || 0));
+    }
+
+    function connectWS() {
+        if (wsState === 'connecting') return;
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        clearReconnectTimer();
+        setWSState('connecting');
+        pushWSEvent('ws.connect.attempt', { url: wsURL, timeout_ms: CONNECT_TIMEOUT_MS });
+        ws = new WebSocket(wsURL);
+        clearConnectTimer();
+        connectTimer = setTimeout(function() {
+            if (ws && ws.readyState === WebSocket.CONNECTING) {
+                pushWSEvent('ws.connect.timeout', { timeout_ms: CONNECT_TIMEOUT_MS });
+                try { ws.close(); } catch (_) {}
+            }
+        }, CONNECT_TIMEOUT_MS);
+
+        ws.onopen = function() {
+            clearConnectTimer();
+            reconnectDelay = 1000;
+            setWSState('connected');
+            pushWSEvent('ws.connected', {});
+        };
+
+        ws.onclose = function(event) {
+            clearConnectTimer();
+            if (ws && ws.readyState === WebSocket.CLOSED) {
+                ws = null;
+            }
+            setWSState('error');
+            pushWSEvent('ws.closed', {
+                code: event && typeof event.code === 'number' ? event.code : null,
+                reason: event && event.reason ? event.reason : '',
+                was_clean: !!(event && event.wasClean)
+            });
+            scheduleReconnect(reconnectDelay);
+            reconnectDelay = Math.min(MAX_RECONNECT_DELAY, Math.round(reconnectDelay * 1.8));
+        };
+
+        ws.onerror = function() {
+            clearConnectTimer();
+            pushWSEvent('ws.error', { state: ws ? ws.readyState : null });
+            if (ws && ws.readyState !== WebSocket.CLOSED) {
+                try { ws.close(); } catch (_) {}
+            }
+        };
+
+        ws.onmessage = function(e) {
+            var evt = JSON.parse(e.data);
+            applyBoardEvent(evt);
+            pushWSEvent(evt.type || 'message', evt.payload || evt);
+            flashIndicator();
+        };
+    }
+
     $('#ws-icon-row').on('click', function() {
+        if (wsState === 'error' && !reconnectTimer && (!ws || ws.readyState === WebSocket.CLOSED)) {
+            reconnectDelay = 1000;
+            connectWS();
+            return;
+        }
         var open = isShown($wsEventLog);
         $wsEventLog[0].style.display = open ? 'none' : 'block';
         if (!open) renderEventLog();
@@ -733,35 +921,8 @@ $(function() {
         }
     });
 
-    var proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    var ws = new WebSocket(proto + '://' + location.host + '/boards/' + board + '/ws');
     applyCollapsedColumns();
-
-    ws.onopen = function() {
-        $wsIndicator.removeClass('error').addClass('connected');
-    };
-    ws.onclose = function() {
-        $wsIndicator.removeClass('connected').addClass('error');
-    };
-    ws.onerror = function() {
-        $wsIndicator.removeClass('connected').addClass('error');
-    };
-    ws.onmessage = function(e) {
-        var evt = JSON.parse(e.data);
-        applyBoardEvent(evt);
-        var now = new Date();
-        var time = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
-        wsEvents.push({
-            id: ++wsEventSeq,
-            type: evt.type || 'message',
-            time: time,
-            json: $('<div>').text(JSON.stringify(evt, null, 2)).html(),
-            expanded: false
-        });
-        if (wsEvents.length > MAX_EVENTS) wsEvents.shift();
-        if (isShown($wsEventLog)) renderEventLog();
-        flashIndicator();
-    };
+    connectWS();
 
     // --- Add column toggle ---
     $('#add-column-btn').on('click', function() {
@@ -797,8 +958,7 @@ $(function() {
         var colId = $form.data('col');
         post('/boards/' + board + '/columns/' + colId + '/cards', new URLSearchParams(new FormData($form[0])))
             .then(function(r) { return r.text(); })
-            .then(function(html) {
-                $form.closest('.board-column').find('.col-cards').append(html);
+            .then(function() {
                 $form.hide()[0].reset();
                 $form.closest('.board-column').find('.add-card-btn').show();
             });
@@ -827,18 +987,55 @@ $(function() {
         toggleCollapsedColumn(Number($(this).data('id')), false);
     });
 
+    var $columnModal = $('#column-modal');
+
     $(document).on('click', '.column-edit-action', function(e) {
         e.stopPropagation();
-        var formId = $(this).data('form');
+        var $trigger = $(this);
+        var formId = $trigger.data('form');
         var form = document.getElementById(formId);
         if (!form) return;
-        var currentName = $(this).data('name') || '';
-        var nextName = window.prompt('column name', currentName);
-        if (nextName === null) return;
-        nextName = nextName.trim();
-        if (!nextName) return;
-        form.elements.name.value = nextName;
-        form.submit();
+        var modalForm = document.getElementById('column-detail-form');
+        var doneInput = document.getElementById('column-done-input');
+        var lateInput = document.getElementById('column-late-input');
+        var doneValue = document.getElementById('column-done-value');
+        var lateValue = document.getElementById('column-late-value');
+        var isDone = String($trigger.data('done')) === '1';
+        var isLate = String($trigger.data('late')) === '1';
+        modalForm.action = form.action;
+        modalForm.elements.name.value = $trigger.data('name') || '';
+        modalForm.elements.wip_limit.value = form.elements.wip_limit ? form.elements.wip_limit.value : '0';
+        modalForm.elements.color.value = form.elements.color ? form.elements.color.value : '';
+        lateInput.checked = isLate;
+        doneInput.checked = isDone;
+        lateValue.value = isLate ? '1' : '0';
+        doneValue.value = isDone ? '1' : '0';
+        doneInput.disabled = isDone;
+        $('#column-done-note').toggle(isDone);
+        $columnModal.addClass('active');
+        $('.col-actions').removeClass('open');
+        setTimeout(function() {
+            var input = document.getElementById('column-name-input');
+            if (!input) return;
+            input.focus();
+            input.select();
+        }, 0);
+    });
+
+    $(document).on('click', '#column-modal-close', function(e) {
+        e.preventDefault();
+        $columnModal.removeClass('active');
+    });
+
+    $columnModal.on('click', function(e) {
+        if (e.target === this) $columnModal.removeClass('active');
+    });
+
+    $('#column-detail-form').on('submit', function() {
+        var doneInput = document.getElementById('column-done-input');
+        var lateInput = document.getElementById('column-late-input');
+        document.getElementById('column-late-value').value = lateInput.checked ? '1' : '0';
+        document.getElementById('column-done-value').value = doneInput.checked ? '1' : '0';
     });
 
     $(document).on('click', function(e) {

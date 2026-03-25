@@ -18,6 +18,7 @@ const (
 	EventCardLabelAdded          = "card.label.added"
 	EventCardLabelRemoved        = "card.label.removed"
 	EventColumnCreated           = "column.created"
+	EventColumnChanged           = "column.changed"
 	EventColumnDeleted           = "column.deleted"
 	EventColumnReordered         = "column.reorder"
 	EventBoardUpdated            = "board.updated"
@@ -74,6 +75,25 @@ type CardMovedPayload struct {
 	ToCardIDs    []int64 `json:"to_card_ids"`
 }
 
+type CardCreatedPayload struct {
+	CardID   int64  `json:"card_id"`
+	ColumnID int64  `json:"column_id"`
+	HTML     string `json:"html"`
+}
+
 type ColumnReorderedPayload struct {
 	ColumnIDs []int64 `json:"column_ids"`
+}
+
+type EventColumnPayload struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	WIPLimit int    `json:"wip_limit"`
+	Color    string `json:"color"`
+	Done     bool   `json:"done"`
+	Late     bool   `json:"late"`
+}
+
+type ColumnChangedPayload struct {
+	Columns []EventColumnPayload `json:"columns"`
 }

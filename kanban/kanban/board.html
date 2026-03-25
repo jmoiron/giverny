@@ -23,6 +23,8 @@
                     <input type="hidden" name="name" value="{{.Name}}">
                     <input type="hidden" name="wip_limit" value="{{.WIPLimit}}">
                     <input type="hidden" name="color" value="{{.Color}}">
+                    <input type="hidden" name="done" value="{{if .Done}}1{{else}}0{{end}}">
+                    <input type="hidden" name="late" value="{{if .Late}}1{{else}}0{{end}}">
                 </form>
                 <form id="delete-col-{{.ID}}" method="post" action="/boards/{{$.board.Slug}}/columns/{{.ID}}/delete"></form>
                 <div class="col-actions" data-col-id="{{.ID}}">
@@ -37,7 +39,10 @@
                            class="col-dropdown-item column-edit-action"
                            data-form="edit-col-{{.ID}}"
                            data-name="{{.Name}}"
-                           data-wip="{{.WIPLimit}}">edit</button>
+                           data-wip="{{.WIPLimit}}"
+                           data-color="{{.Color}}"
+                           data-done="{{if .Done}}1{{else}}0{{end}}"
+                           data-late="{{if .Late}}1{{else}}0{{end}}">edit</button>
                         <button type="button"
                            class="col-dropdown-item danger"
                            data-submit="delete-col-{{.ID}}"
@@ -82,6 +87,8 @@
             <form class="add-column-form" method="post" action="/boards/{{.board.Slug}}/columns" style="display:none">
                 <input type="text" name="name" placeholder="column name" required>
                 <input type="hidden" name="color" value="">
+                <input type="hidden" name="done" value="0">
+                <input type="hidden" name="late" value="0">
                 <div class="add-card-actions">
                     <button type="button" class="btn-cancel">cancel</button>
                     <button type="submit">add</button>
@@ -95,6 +102,43 @@
 <div id="card-modal" class="modal-overlay">
     <div class="modal card-modal-inner">
         <!-- loaded via AJAX -->
+    </div>
+</div>
+
+<div id="column-modal" class="modal-overlay">
+    <div class="modal column-modal-inner">
+        <a href="#" class="modal-close" id="column-modal-close" aria-label="close">
+            <i class="fa-solid fa-xmark"></i>
+        </a>
+        <form id="column-detail-form" method="post">
+            <input type="hidden" name="wip_limit" value="0">
+            <input type="hidden" name="color" value="">
+            <div class="column-modal-body">
+                <div class="card-section">
+                    <div class="card-section-label">title</div>
+                    <input type="text" name="name" id="column-name-input" placeholder="column title" required>
+                </div>
+                <div class="card-section">
+                    <div class="card-section-label">settings</div>
+                    <input type="hidden" name="late" value="0" id="column-late-value">
+                    <label class="column-setting-row">
+                        <input type="checkbox" value="1" id="column-late-input">
+                        <span>late column</span>
+                    </label>
+                    <input type="hidden" name="done" value="0" id="column-done-value">
+                    <label class="column-setting-row" id="column-done-row">
+                        <input type="checkbox" value="1" id="column-done-input">
+                        <span>done column</span>
+                    </label>
+                    <div class="column-setting-note" id="column-done-note" style="display:none">
+                        every board must have a done column
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button type="submit">save</button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
