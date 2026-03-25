@@ -1,24 +1,100 @@
-<div class="card-detail" data-card-id="{{.card.ID}}">
-    <button class="modal-close" id="card-modal-close" type="button">
+<div class="card-detail" data-card-id="{{.card.ID}}" data-card-color="{{.card.Color}}">
+    <a href="#" class="modal-close" id="card-modal-close" aria-label="close">
         <i class="fa-solid fa-xmark"></i>
-    </button>
+    </a>
     <form id="card-detail-form" data-id="{{.card.ID}}">
-        <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
-        <textarea class="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
-        <div class="card-meta">
-            <div class="move-row">
-                <label>column</label>
-                <select name="column_id" id="card-move-select">
-                    {{range .columns}}
-                    <option value="{{.ID}}"{{if eq .ID $.card.ColumnID}} selected{{end}}>{{.Name}}</option>
-                    {{end}}
-                </select>
+        <input type="hidden" name="color" value="{{.card.Color}}">
+        <div class="card-detail-layout">
+            <div class="card-main-pane">
+                <div class="card-edit-warning is-hidden" id="card-edit-warning">
+                    warning: card information has been modified elsewhere
+                </div>
+                <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
+
+                <div class="card-section">
+                    <div class="card-section-label">labels</div>
+                    <div class="labels-editor">
+                        <div class="card-selected-labels" id="card-selected-labels">
+                            {{range .card.Labels}}
+                            <span class="label-pill selected {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">
+                                <span>{{.Title}}</span>
+                                <a href="#" class="label-remove-btn" aria-label="remove {{.Title}} label">
+                                    <i class="fa-solid fa-circle-xmark"></i>
+                                </a>
+                                <input type="hidden" name="label_ids" value="{{.ID}}">
+                            </span>
+                            {{end}}
+                        </div>
+                        <div class="label-add-row">
+                            <div class="label-picker" id="card-label-picker">
+                                <input id="card-label-input" type="text" autocomplete="off" placeholder="find or add a label">
+                                <div class="label-suggestions" id="card-label-suggestions" role="listbox"></div>
+                            </div>
+                        </div>
+                        <div id="known-labels-data" hidden>
+                            {{range .knownLabels}}
+                            <div class="known-label-option"
+                                 data-label-id="{{.ID}}"
+                                 data-title="{{.Title}}"
+                                 data-color="{{.Color}}"
+                                 data-text-class="{{.TextClass}}"
+                                 data-description="{{.Description}}"></div>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-section">
+                    <div class="card-section-label">description</div>
+                    <div class="markdown-editable card-description-rendered{{if not .card.Content}} is-empty{{end}}" id="card-description-rendered">
+                        {{if .card.Content}}
+                        {{.cardRenderedContent}}
+                        {{else}}
+                        double-click to add a markdown description
+                        {{end}}
+                    </div>
+                    <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
+                </div>
+
+                <div class="card-actions is-hidden">
+                    <a href="#" class="card-cancel-link" id="card-edit-cancel">cancel</a>
+                    <button type="submit">save</button>
+                </div>
             </div>
-        </div>
-        <div class="card-actions">
-            <button type="submit">save</button>
-            <div class="spacer"></div>
-            <button type="button" class="danger-btn" id="card-archive-btn" data-card-id="{{.card.ID}}">archive</button>
+
+            <aside class="card-quick-pane">
+                <div class="quick-controls-title">quick controls</div>
+                <button type="button" class="quick-control-btn"><i class="fa-solid fa-check"></i><span>mark as done</span></button>
+                <button type="button" class="quick-control-btn"><i class="fa-solid fa-bell"></i><span>subscribe</span></button>
+                <button type="button" class="quick-control-btn quick-color-btn" data-card-color="{{.card.Color}}">
+                    <i class="fa-regular fa-square"></i><span>color</span>
+                </button>
+                <button type="button" class="quick-control-btn"><i class="fa-solid fa-user-check"></i><span>assign</span></button>
+                <div class="quick-control-divider"></div>
+                <div class="quick-section-title">dates</div>
+                <div class="quick-date-list">
+                    <div class="quick-date-item">
+                        <span class="quick-date-label">created</span>
+                        <span class="quick-date-value">{{.card.CreatedAt.Format "15:04 Jan 2"}}</span>
+                    </div>
+                    <div class="quick-date-item">
+                        <span class="quick-date-label">updated</span>
+                        <span class="quick-date-value">{{.card.UpdatedAt.Format "15:04 Jan 2"}}</span>
+                    </div>
+                </div>
+                <button type="button" class="quick-control-btn"><i class="fa-solid fa-calendar-check"></i><span>due date</span></button>
+                <button type="button" class="quick-control-btn"><i class="fa-solid fa-calendar"></i><span>start date</span></button>
+                <div class="quick-control-divider"></div>
+                <div class="move-row quick-column-row">
+                    <label>column</label>
+                    <select name="column_id" id="card-move-select">
+                        {{range .columns}}
+                        <option value="{{.ID}}"{{if eq .ID $.card.ColumnID}} selected{{end}}>{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <button type="button" class="quick-control-btn danger-btn" id="card-archive-btn" data-card-id="{{.card.ID}}">archive</button>
+            </aside>
         </div>
     </form>
 </div>

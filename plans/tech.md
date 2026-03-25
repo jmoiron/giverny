@@ -17,3 +17,9 @@ User access should be read-only, admin, and super-admin. Super-admins can alter/
 The site should be usable on mobile. This may entail developing some different UI flows. Lets consider mobile to be secondary.
 
 The site should be able to send email over SMTP. It will require a server, username, and password to do this. These should be stored in the db and configurable via the app. The password can be encrypted at rest with the SECRET specified in the config file to prevent a compromised DB from compromising the password, but this must be reversable encryption as we need to use the password to log into the SMTP server.
+
+The site should "live update" for simultaneous users or for a user that is connected in two browser windows. The architecture for this is as follows:
+* each page connects to a change feed websocket
+* each backend modificaiton results in an update payload that is published on all websockets
+* all frontend UI updates are in response to update payloads
+* kanban is heavily oriented around drag & drop; when a user moves a UI element that results in a backend modification, the element in question should have some common visual indication language that it's waiting for a message to mark that move as successful in the backend (timeouts? failures?)

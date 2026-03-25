@@ -6,3 +6,4 @@ giverny.db
 static/fa/ve
 node_modules
 __pycache__
+.gocache/

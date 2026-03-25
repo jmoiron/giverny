@@ -4,6 +4,14 @@
         <span class="visibility-badge">{{.board.Visibility}}</span>
         {{if .board.Description}}<span class="board-desc">{{.board.Description}}</span>{{end}}
     </div>
+    <div class="ws-status-box" id="ws-status-box">
+        <div class="ws-icon-row" id="ws-icon-row">
+            <i class="fa-solid fa-plug ws-indicator" id="ws-indicator"></i>
+        </div>
+        <div class="ws-event-log" id="ws-event-log" style="display:none">
+            <div class="ws-event-empty">no events yet</div>
+        </div>
+    </div>
     <div class="board-columns">
         {{range .columns}}
         <div class="board-column" data-id="{{.ID}}">
@@ -11,17 +19,44 @@
                 <span class="col-name">{{.Name}}</span>
                 {{if .WIPLimit}}<span class="wip-badge">{{.WIPLimit}}</span>{{end}}
                 {{if $.isAdmin}}
+                <form id="edit-col-{{.ID}}" method="post" action="/boards/{{$.board.Slug}}/columns/{{.ID}}/edit">
+                    <input type="hidden" name="name" value="{{.Name}}">
+                    <input type="hidden" name="wip_limit" value="{{.WIPLimit}}">
+                    <input type="hidden" name="color" value="{{.Color}}">
+                </form>
                 <form id="delete-col-{{.ID}}" method="post" action="/boards/{{$.board.Slug}}/columns/{{.ID}}/delete"></form>
-                <i class="fa-solid fa-circle-xmark col-delete-icon"
-                   data-submit="delete-col-{{.ID}}"
-                   data-confirm="Delete column '{{.Name}}'? Cards in this column will also be deleted."
-                   title="delete column"></i>
+                <div class="col-actions" data-col-id="{{.ID}}">
+                    <button type="button" class="col-action-btn col-collapse-btn" title="collapse column">
+                        <i class="fa-solid fa-window-minimize"></i>
+                    </button>
+                    <button type="button" class="col-action-btn col-menu-trigger" title="column menu">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
+                    <div class="col-dropdown">
+                        <button type="button"
+                           class="col-dropdown-item column-edit-action"
+                           data-form="edit-col-{{.ID}}"
+                           data-name="{{.Name}}"
+                           data-wip="{{.WIPLimit}}">edit</button>
+                        <button type="button"
+                           class="col-dropdown-item danger"
+                           data-submit="delete-col-{{.ID}}"
+                           data-confirm="Delete column '{{.Name}}'? Cards in this column will also be deleted.">delete</button>
+                    </div>
+                </div>
                 {{end}}
             </div>
             <div class="col-cards" data-column-id="{{.ID}}">
                 {{range .Cards}}
                 <div class="kanban-card" data-id="{{.ID}}">
                     <div class="card-title">{{.Title}}</div>
+                    {{if .Labels}}
+                    <div class="card-labels">
+                        {{range .Labels}}
+                        <span class="label-pill {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
+                        {{end}}
+                    </div>
+                    {{end}}
                 </div>
                 {{end}}
             </div>
@@ -46,6 +81,7 @@
             </button>
             <form class="add-column-form" method="post" action="/boards/{{.board.Slug}}/columns" style="display:none">
                 <input type="text" name="name" placeholder="column name" required>
+                <input type="hidden" name="color" value="">
                 <div class="add-card-actions">
                     <button type="button" class="btn-cancel">cancel</button>
                     <button type="submit">add</button>

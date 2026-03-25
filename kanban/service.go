@@ -1,9 +1,14 @@
 package kanban
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/monet/db"
 	"github.com/jmoiron/monet/mtr"
@@ -18,10 +23,12 @@ type ColumnWithCards struct {
 type BoardService struct{ db db.DB }
 type ColumnService struct{ db db.DB }
 type CardService struct{ db db.DB }
+type LabelService struct{ db db.DB }
 
 func NewBoardService(dbh db.DB) *BoardService   { return &BoardService{db: dbh} }
 func NewColumnService(dbh db.DB) *ColumnService { return &ColumnService{db: dbh} }
 func NewCardService(dbh db.DB) *CardService     { return &CardService{db: dbh} }
+func NewLabelService(dbh db.DB) *LabelService   { return &LabelService{db: dbh} }
 
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
 
@@ -30,6 +37,72 @@ func slugify(s string) string {
 	s = nonAlphanumRe.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
+}
+
+func normalizeLabelTitle(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+func canonicalLabelTitle(s string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+}
+
+func sanitizeLabelColor(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) == 7 && strings.HasPrefix(s, "#") {
+		return s
+	}
+	return "#888888"
+}
+
+func labelTextClass(color string) string {
+	color = strings.TrimSpace(strings.TrimPrefix(color, "#"))
+	if len(color) != 6 {
+		return "fg-dark"
+	}
+	r, err := strconv.ParseInt(color[0:2], 16, 64)
+	if err != nil {
+		return "fg-dark"
+	}
+	g, err := strconv.ParseInt(color[2:4], 16, 64)
+	if err != nil {
+		return "fg-dark"
+	}
+	b, err := strconv.ParseInt(color[4:6], 16, 64)
+	if err != nil {
+		return "fg-dark"
+	}
+	luminance := 0.2126*channelLuminance(float64(r)/255.0) +
+		0.7152*channelLuminance(float64(g)/255.0) +
+		0.0722*channelLuminance(float64(b)/255.0)
+	if luminance > 0.58 {
+		return "fg-dark"
+	}
+	return "fg-light"
+}
+
+func channelLuminance(v float64) float64 {
+	if v <= 0.03928 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
+}
+
+func finalizeLabel(label *Label) {
+	if label == nil {
+		return
+	}
+	label.TextClass = labelTextClass(label.Color)
+}
+
+func finalizeLabels(labels []*Label) {
+	for _, label := range labels {
+		finalizeLabel(label)
+	}
 }
 
 // BoardService methods
@@ -88,14 +161,14 @@ func (s *BoardService) Delete(id int64) error {
 
 // ColumnService methods
 
-func (s *ColumnService) Create(boardID int64, name string) (*Column, error) {
+func (s *ColumnService) Create(boardID int64, name, color string) (*Column, error) {
 	var col Column
 	err := db.With(s.db, func(tx *sqlx.Tx) error {
 		var maxPos int
 		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM board_column WHERE board_id=?`, boardID)
 		res, err := tx.Exec(
-			`INSERT INTO board_column (board_id, name, position) VALUES (?, ?, ?)`,
-			boardID, name, maxPos+1,
+			`INSERT INTO board_column (board_id, name, position, color) VALUES (?, ?, ?, ?)`,
+			boardID, name, maxPos+1, strings.TrimSpace(color),
 		)
 		if err != nil {
 			return err
@@ -115,8 +188,8 @@ func (s *ColumnService) ListByBoard(boardID int64) ([]*Column, error) {
 	return cols, err
 }
 
-func (s *ColumnService) Update(id int64, name string, wipLimit int) error {
-	_, err := s.db.Exec(`UPDATE board_column SET name=?, wip_limit=? WHERE id=?`, name, wipLimit, id)
+func (s *ColumnService) Update(id int64, name string, wipLimit int, color string) error {
+	_, err := s.db.Exec(`UPDATE board_column SET name=?, wip_limit=?, color=? WHERE id=?`, name, wipLimit, strings.TrimSpace(color), id)
 	return err
 }
 
@@ -138,15 +211,15 @@ func (s *ColumnService) Reorder(boardID int64, ids []int64) error {
 
 // CardService methods
 
-func (s *CardService) Create(columnID, boardID, createdBy int64, title, content string) (*Card, error) {
+func (s *CardService) Create(columnID, boardID, createdBy int64, title, content, color string) (*Card, error) {
 	rendered := mtr.RenderMarkdown(content)
 	var card Card
 	err := db.With(s.db, func(tx *sqlx.Tx) error {
 		var maxPos int
 		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM card WHERE column_id=?`, columnID)
 		res, err := tx.Exec(
-			`INSERT INTO card (column_id, board_id, title, content, content_rendered, position, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			columnID, boardID, title, content, rendered, maxPos+1, createdBy,
+			`INSERT INTO card (column_id, board_id, title, content, content_rendered, position, color, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			columnID, boardID, title, content, rendered, maxPos+1, strings.TrimSpace(color), createdBy,
 		)
 		if err != nil {
 			return err
@@ -163,6 +236,10 @@ func (s *CardService) Create(columnID, boardID, createdBy int64, title, content 
 func (s *CardService) Get(id int64) (*Card, error) {
 	var card Card
 	err := s.db.Get(&card, `SELECT * FROM card WHERE id=?`, id)
+	if err != nil {
+		return &card, err
+	}
+	card.Labels, err = s.labelsForCard(id)
 	return &card, err
 }
 
@@ -172,16 +249,62 @@ func (s *CardService) ListByBoard(boardID int64) ([]*Card, error) {
 		`SELECT * FROM card WHERE board_id=? AND archived_at IS NULL ORDER BY column_id, position, id`,
 		boardID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachLabelsByBoard(cards, boardID); err != nil {
+		return nil, err
+	}
 	return cards, err
 }
 
-func (s *CardService) Update(id int64, title, content string) error {
+func (s *CardService) Update(id int64, title, content, color string, labelIDs []int64) error {
 	rendered := mtr.RenderMarkdown(content)
-	_, err := s.db.Exec(
-		`UPDATE card SET title=?, content=?, content_rendered=?, updated_at=datetime('now') WHERE id=?`,
-		title, content, rendered, id,
-	)
-	return err
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.Exec(
+			`UPDATE card SET title=?, content=?, content_rendered=?, color=?, updated_at=datetime('now') WHERE id=?`,
+			title, content, rendered, strings.TrimSpace(color), id,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM card_label WHERE card_id=?`, id); err != nil {
+			return err
+		}
+		seen := make(map[int64]struct{}, len(labelIDs))
+		for _, labelID := range labelIDs {
+			if labelID == 0 {
+				continue
+			}
+			if _, ok := seen[labelID]; ok {
+				continue
+			}
+			seen[labelID] = struct{}{}
+			if _, err := tx.Exec(`INSERT INTO card_label (card_id, label_id) VALUES (?, ?)`, id, labelID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (s *CardService) AddLabel(cardID, labelID int64) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO card_label (card_id, label_id) VALUES (?, ?)`, cardID, labelID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+}
+
+func (s *CardService) RemoveLabel(cardID, labelID int64) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.Exec(`DELETE FROM card_label WHERE card_id=? AND label_id=?`, cardID, labelID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
 }
 
 func (s *CardService) Move(id, columnID int64, position int) error {
@@ -206,6 +329,171 @@ func (s *CardService) Reorder(columnID int64, ids []int64) error {
 		}
 		return nil
 	})
+}
+
+func (s *CardService) labelsForCard(cardID int64) ([]*Label, error) {
+	var labels []*Label
+	err := s.db.Select(&labels, `
+		SELECT l.id, l.title, l.normalized_title, l.description, l.color, l.created_at
+		FROM label l
+		JOIN card_label cl ON cl.label_id = l.id
+		WHERE cl.card_id=?
+		ORDER BY l.title COLLATE NOCASE, l.id
+	`, cardID)
+	finalizeLabels(labels)
+	return labels, err
+}
+
+func (s *CardService) attachLabelsByBoard(cards []*Card, boardID int64) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	cardsByID := make(map[int64]*Card, len(cards))
+	for _, card := range cards {
+		card.Labels = nil
+		cardsByID[card.ID] = card
+	}
+	type cardLabelRow struct {
+		CardID          int64     `db:"card_id"`
+		ID              int64     `db:"id"`
+		Title           string    `db:"title"`
+		NormalizedTitle string    `db:"normalized_title"`
+		Description     string    `db:"description"`
+		Color           string    `db:"color"`
+		CreatedAt       time.Time `db:"created_at"`
+	}
+	var rows []cardLabelRow
+	if err := s.db.Select(&rows, `
+		SELECT cl.card_id, l.id, l.title, l.normalized_title, l.description, l.color, l.created_at
+		FROM card_label cl
+		JOIN label l ON l.id = cl.label_id
+		JOIN card c ON c.id = cl.card_id
+		WHERE c.board_id=? AND c.archived_at IS NULL
+		ORDER BY l.title COLLATE NOCASE, l.id
+	`, boardID); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		card := cardsByID[row.CardID]
+		if card == nil {
+			continue
+		}
+		card.Labels = append(card.Labels, &Label{
+			ID:              row.ID,
+			Title:           row.Title,
+			NormalizedTitle: row.NormalizedTitle,
+			Description:     row.Description,
+			Color:           row.Color,
+			CreatedAt:       row.CreatedAt,
+			TextClass:       labelTextClass(row.Color),
+		})
+	}
+	return nil
+}
+
+// LabelService methods
+
+func (s *LabelService) List() ([]*Label, error) {
+	var labels []*Label
+	err := s.db.Select(&labels, `
+		SELECT id, title, normalized_title, description, color, created_at
+		FROM label
+		ORDER BY title COLLATE NOCASE, id
+	`)
+	finalizeLabels(labels)
+	return labels, err
+}
+
+func (s *LabelService) Get(id int64) (*Label, error) {
+	var label Label
+	err := s.db.Get(&label, `
+		SELECT id, title, normalized_title, description, color, created_at
+		FROM label
+		WHERE id=?
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	finalizeLabel(&label)
+	return &label, nil
+}
+
+func (s *LabelService) CreateOrGet(title, description, color string) (*Label, bool, error) {
+	title = canonicalLabelTitle(title)
+	normalized := normalizeLabelTitle(title)
+	if normalized == "" {
+		return nil, false, fmt.Errorf("label title is required")
+	}
+	var label Label
+	err := s.db.Get(&label, `
+		SELECT id, title, normalized_title, description, color, created_at
+		FROM label WHERE normalized_title=?
+	`, normalized)
+	if err == nil {
+		finalizeLabel(&label)
+		return &label, false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err
+	}
+	description = strings.TrimSpace(description)
+	err = db.With(s.db, func(tx *sqlx.Tx) error {
+		if strings.TrimSpace(color) == "" {
+			var usedColors []string
+			if err := tx.Select(&usedColors, `SELECT color FROM label ORDER BY id`); err != nil {
+				return err
+			}
+			color = nextLabelColor(usedColors)
+		} else {
+			color = sanitizeLabelColor(color)
+		}
+		res, err := tx.Exec(
+			`INSERT INTO label (title, normalized_title, description, color) VALUES (?, ?, ?, ?)`,
+			title, normalized, description, color,
+		)
+		if err != nil {
+			var existing Label
+			if getErr := tx.Get(&existing, `
+				SELECT id, title, normalized_title, description, color, created_at
+				FROM label WHERE normalized_title=?
+			`, normalized); getErr == nil {
+				label = existing
+				return nil
+			}
+			return err
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		return tx.Get(&label, `
+			SELECT id, title, normalized_title, description, color, created_at
+			FROM label WHERE id=?
+		`, id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	finalizeLabel(&label)
+	return &label, true, nil
+}
+
+func (s *LabelService) Update(id int64, title, description, color string) error {
+	title = canonicalLabelTitle(title)
+	normalized := normalizeLabelTitle(title)
+	if normalized == "" {
+		return fmt.Errorf("label title is required")
+	}
+	_, err := s.db.Exec(
+		`UPDATE label SET title=?, normalized_title=?, description=?, color=? WHERE id=?`,
+		title, normalized, strings.TrimSpace(description), sanitizeLabelColor(color), id,
+	)
+	return err
+}
+
+func (s *LabelService) Delete(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM label WHERE id=?`, id)
+	return err
 }
 
 // BuildColumns groups cards by column_id into ColumnWithCards in column order.

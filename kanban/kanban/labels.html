@@ -1,0 +1,51 @@
+<div class="admin-wrap admin-labels">
+    <h2>labels</h2>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>title</th>
+                <th>description</th>
+                <th>color</th>
+                <th>preview</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .labels}}
+            <tr>
+                <td>
+                    <form id="label-{{.ID}}" class="label-form" method="post" action="/labels/{{.ID}}/edit">
+                        <input type="text" name="title" value="{{.Title}}" required>
+                </td>
+                <td>
+                        <input type="text" name="description" value="{{.Description}}" placeholder="optional description">
+                </td>
+                <td>
+                        <input type="color" name="color" value="{{.Color}}">
+                </td>
+                <td>
+                        <span class="label-pill {{.TextClass}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
+                    </form>
+                </td>
+                <td>
+                    <div class="row-actions">
+                        <form id="delete-label-{{.ID}}" method="post" action="/labels/{{.ID}}/delete"></form>
+                        <i class="fa-solid fa-floppy-disk action-icon save-icon"
+                           data-submit="label-{{.ID}}" title="save label"></i>
+                        <i class="fa-solid fa-circle-xmark action-icon delete-icon"
+                           data-submit="delete-label-{{.ID}}"
+                           data-confirm="Delete label '{{.Title}}'? This will remove it from all cards."
+                           title="delete label"></i>
+                    </div>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+
+    <h3>create a label</h3>
+    <form class="invite-form label-create-form" method="post" action="/labels/">
+        <input type="text" name="title" placeholder="label title" required>
+        <button type="submit">add</button>
+    </form>
+</div>

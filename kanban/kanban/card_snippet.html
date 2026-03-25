@@ -1,3 +1,10 @@
 <div class="kanban-card" data-id="{{.card.ID}}">
     <div class="card-title">{{.card.Title}}</div>
+    {{if .card.Labels}}
+    <div class="card-labels">
+        {{range .card.Labels}}
+        <span class="label-pill {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
+        {{end}}
+    </div>
+    {{end}}
 </div>

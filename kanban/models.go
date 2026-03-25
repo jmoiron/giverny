@@ -30,6 +30,7 @@ type Column struct {
 	Name      string    `db:"name"`
 	Position  int       `db:"position"`
 	WIPLimit  int       `db:"wip_limit"`
+	Color     string    `db:"color"`
 	CreatedAt time.Time `db:"created_at"`
 }
 
@@ -41,19 +42,24 @@ type Card struct {
 	Content         string     `db:"content"`
 	ContentRendered string     `db:"content_rendered"`
 	Position        int        `db:"position"`
+	Color           string     `db:"color"`
 	AssigneeID      *int64     `db:"assignee_id"`
 	DueDate         *time.Time `db:"due_date"`
 	ArchivedAt      *time.Time `db:"archived_at"`
 	CreatedBy       int64      `db:"created_by"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
+	Labels          []*Label   `db:"-"`
 }
 
 type Label struct {
-	ID      int64  `db:"id"`
-	BoardID int64  `db:"board_id"`
-	Name    string `db:"name"`
-	Color   string `db:"color"`
+	ID              int64     `db:"id"`
+	Title           string    `db:"title"`
+	NormalizedTitle string    `db:"normalized_title"`
+	Description     string    `db:"description"`
+	Color           string    `db:"color"`
+	CreatedAt       time.Time `db:"created_at"`
+	TextClass       string    `db:"-"`
 }
 
 type CardLabel struct {
@@ -142,6 +148,10 @@ var ColumnMigrations = monarch.Set{
 			);`,
 			Down: `DROP TABLE board_column;`,
 		},
+		{
+			Up:   `ALTER TABLE board_column ADD COLUMN color TEXT NOT NULL DEFAULT '';`,
+			Down: ``,
+		},
 	},
 }
 
@@ -166,6 +176,10 @@ var CardMigrations = monarch.Set{
 			);`,
 			Down: `DROP TABLE card;`,
 		},
+		{
+			Up:   `ALTER TABLE card ADD COLUMN color TEXT NOT NULL DEFAULT '';`,
+			Down: ``,
+		},
 	},
 }
 
@@ -188,6 +202,35 @@ var LabelMigrations = monarch.Set{
 				PRIMARY KEY (card_id, label_id)
 			);`,
 			Down: `DROP TABLE card_label;`,
+		},
+		{
+			Up: `PRAGMA foreign_keys = OFF;
+CREATE TABLE IF NOT EXISTS label_new (
+	id INTEGER NOT NULL PRIMARY KEY,
+	title TEXT NOT NULL,
+	normalized_title TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	color TEXT NOT NULL DEFAULT '#888888',
+	created_at DATETIME DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO label_new (id, title, normalized_title, description, color, created_at)
+SELECT id, trim(name), lower(trim(name)), '', color, datetime('now')
+FROM label;
+DROP TABLE label;
+ALTER TABLE label_new RENAME TO label;
+CREATE INDEX IF NOT EXISTS idx_card_label_label_id ON card_label(label_id);
+PRAGMA foreign_keys = ON;`,
+			Down: `DROP INDEX IF EXISTS idx_card_label_label_id;
+ALTER TABLE label RENAME TO label_new;
+CREATE TABLE IF NOT EXISTS label (
+	id INTEGER NOT NULL PRIMARY KEY,
+	board_id INTEGER NOT NULL REFERENCES board(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	color TEXT NOT NULL DEFAULT '#888888'
+);
+INSERT INTO label (id, board_id, name, color)
+SELECT id, 1, title, color FROM label_new;
+DROP TABLE label_new;`,
 		},
 	},
 }

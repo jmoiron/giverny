@@ -24,22 +24,57 @@
             <nav>
                 <a href="/" class="logo">Giverny</a>
                 {{if .user}}
-                <a href="/boards/">boards</a>
+                <a href="/boards/" class="nav-link">
+                    <i class="fa-solid fa-table-columns"></i>
+                    <span>boards</span>
+                </a>
+                {{if .user.IsAdmin}}
+                <a href="/labels/" class="nav-link">
+                    <i class="fa-solid fa-tags"></i>
+                    <span>labels</span>
+                </a>
+                {{end}}
                 {{if .user.IsSuperAdmin}}
-                <a href="/admin/users/">users</a>
+                <a href="/admin/users/" class="nav-link">
+                    <i class="fa-solid fa-users"></i>
+                    <span>users</span>
+                </a>
                 {{end}}
                 {{end}}
                 <div class="nav-right">
                     {{if .user}}
-                    <span class="user">
-                        {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{end}}
-                        {{.user.Username}}
-                    </span>
-                    <a href="/logout/">logout</a>
+                    <i class="fa-solid fa-magnifying-glass nav-icon" title="search"></i>
+                    <i class="fa-solid fa-bell nav-icon" title="notifications"></i>
+                    <div class="user-menu-wrap">
+                        <button class="user-menu-trigger" id="user-menu-trigger">
+                            {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{end}}
+                            <span>{{.user.Username}}</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="user-dropdown" id="user-dropdown">
+                            <a href="/settings/" class="dropdown-item">
+                                <i class="fa-solid fa-gear dropdown-icon"></i>
+                                <span class="dropdown-label">settings</span>
+                            </a>
+                            <button class="dropdown-item" id="theme-toggle">
+                                <i class="fa-regular fa-sun dropdown-icon"></i>
+                                <i class="fa-solid fa-moon dropdown-icon"></i>
+                                <span class="theme-toggle-pill"></span>
+                            </button>
+                            <a href="/logout/" class="dropdown-item">
+                                <i class="fa-solid fa-right-from-bracket dropdown-icon"></i>
+                                <span class="dropdown-label">logout</span>
+                            </a>
+                        </div>
+                    </div>
                     {{else}}
+                    <button class="theme-toggle-nav" id="theme-toggle" title="toggle theme">
+                        <i class="fa-regular fa-sun"></i>
+                        <i class="fa-solid fa-moon"></i>
+                        <span class="theme-toggle-pill"></span>
+                    </button>
                     <a href="/login/">login</a>
                     {{end}}
-                    <button id="theme-toggle" aria-label="Toggle dark mode"></button>
                 </div>
             </nav>
         </header>

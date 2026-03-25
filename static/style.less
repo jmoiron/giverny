@@ -47,6 +47,22 @@ header {
                 font-weight: bold;
             }
         }
+
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: var(--text);
+
+            i {
+                color: var(--muted);
+                font-size: 0.92rem;
+            }
+
+            &:hover i {
+                color: var(--text);
+            }
+        }
     }
 
     .user {
@@ -60,6 +76,17 @@ header {
         height: 24px;
         border-radius: 50%;
         object-fit: cover;
+    }
+
+    .nav-icon {
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.3rem 0.35rem;
+        border-radius: 4px;
+        background: none;
+        border: none;
+        &:hover { color: var(--text); background: var(--hover-bg); }
     }
 
     .nav-right {
@@ -76,17 +103,16 @@ body {
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-#theme-toggle {
+.theme-toggle-pill {
     width: 36px;
+    min-width: 36px;
     height: 20px;
     border-radius: 10px;
     background: var(--border);
-    border: none;
-    cursor: pointer;
     position: relative;
     flex-shrink: 0;
+    align-self: center;
     transition: background 0.25s ease;
-    padding: 0;
 
     &::after {
         content: '';
@@ -101,13 +127,107 @@ body {
     }
 }
 
-
-html.dark #theme-toggle {
+html.dark .theme-toggle-pill {
     background: var(--sky);
+    &::after { transform: translateX(16px); }
+}
 
-    &::after {
-        transform: translateX(16px);
+// Show only the relevant icon for the current theme.
+.theme-toggle-nav,
+#theme-toggle {
+    .fa-moon { display: none; }
+}
+html.dark {
+    .theme-toggle-nav,
+    #theme-toggle {
+        .fa-sun  { display: none; }
+        .fa-moon { display: inline; }
     }
+}
+
+// Standalone toggle used in the nav when logged out.
+.theme-toggle-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 0.3rem 0.4rem;
+    border-radius: 4px;
+    &:hover { background: var(--hover-bg); color: var(--text); }
+}
+
+.user-menu-wrap {
+    position: relative;
+}
+
+.user-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0.3rem 0.45rem;
+    border-radius: 4px;
+
+    .fa-chevron-down {
+        font-size: 0.7rem;
+        color: var(--muted);
+        transition: transform 0.2s;
+    }
+
+    &:hover { background: var(--hover-bg); }
+    &.open .fa-chevron-down { transform: rotate(180deg); }
+}
+
+.user-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    .card-shadow();
+    min-width: 170px;
+    z-index: 200;
+    padding: 0.25rem;
+
+    &.open { display: block; }
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 4px;
+    color: var(--text);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    width: 100%;
+    text-align: left;
+
+    .dropdown-icon {
+        width: 1rem;
+        text-align: center;
+        color: var(--muted);
+        flex-shrink: 0;
+    }
+
+    .dropdown-label { flex: 1; }
+
+    &:hover { background: var(--hover-bg); color: var(--text); }
 }
 
 .giverny { font-family: 'Courgette', sans-serif; }
@@ -117,6 +237,26 @@ main.board-main {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.markdown-editable {
+    min-height: 160px;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--hover-bg);
+    color: var(--text);
+    cursor: text;
+
+    &.is-empty {
+        color: var(--muted);
+        font-style: italic;
+        display: flex;
+        align-items: center;
+    }
+
+    > :first-child { margin-top: 0; }
+    > :last-child { margin-bottom: 0; }
 }
 
 .modal-overlay {

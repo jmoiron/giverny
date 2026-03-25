@@ -70,6 +70,12 @@
 .fa-copy {
   --fa: "\f0c5";
 }
+.fa-square {
+  --fa: "\f0c8";
+}
+.fa-sun {
+  --fa: "\f185";
+}
 
 /* Solid icons */
 .fa-arrow-right {
@@ -78,8 +84,14 @@
 .fa-bars {
   --fa: "\f0c9";
 }
+.fa-bell {
+  --fa: "\f0f3";
+}
 .fa-calendar {
   --fa: "\f133";
+}
+.fa-calendar-check {
+  --fa: "\f274";
 }
 .fa-check {
   --fa: "\f00c";
@@ -135,6 +147,12 @@
 .fa-pen-to-square {
   --fa: "\f044";
 }
+.fa-plug {
+  --fa: "\f1e6";
+}
+.fa-plug-circle-bolt {
+  --fa: "\e55b";
+}
 .fa-plus {
   --fa: "\+";
 }
@@ -143,6 +161,9 @@
 }
 .fa-right-to-bracket {
   --fa: "\f2f6";
+}
+.fa-square {
+  --fa: "\f0c8";
 }
 .fa-sun {
   --fa: "\f185";
@@ -153,6 +174,9 @@
 .fa-tag {
   --fa: "\f02b";
 }
+.fa-tags {
+  --fa: "\f02c";
+}
 .fa-trash {
   --fa: "\f1f8";
 }
@@ -162,11 +186,17 @@
 .fa-user {
   --fa: "\f007";
 }
+.fa-user-check {
+  --fa: "\f4fc";
+}
 .fa-user-plus {
   --fa: "\f234";
 }
 .fa-users {
   --fa: "\f0c0";
+}
+.fa-window-minimize {
+  --fa: "\f2d1";
 }
 .fa-xmark {
   --fa: "\f00d";
