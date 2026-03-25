@@ -15,7 +15,7 @@
     <div class="board-columns">
         {{range .columns}}
         <div class="board-column" data-id="{{.ID}}">
-            <div class="col-header">
+            <div class="col-header" draggable="true">
                 <span class="col-name">{{.Name}}</span>
                 {{if .WIPLimit}}<span class="wip-badge">{{.WIPLimit}}</span>{{end}}
                 {{if $.isAdmin}}
@@ -48,7 +48,7 @@
             </div>
             <div class="col-cards" data-column-id="{{.ID}}">
                 {{range .Cards}}
-                <div class="kanban-card" data-id="{{.ID}}">
+                <div class="kanban-card" data-id="{{.ID}}" draggable="true">
                     <div class="card-title">{{.Title}}</div>
                     {{if .Labels}}
                     <div class="card-labels">

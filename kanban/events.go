@@ -10,7 +10,8 @@ const BoardGlobal = ""
 const (
 	EventCardCreated             = "card.created"
 	EventCardUpdated             = "card.updated"
-	EventCardMoved               = "card.moved"
+	EventCardMoved               = "card.move"
+	EventCardReordered           = "card.reorder"
 	EventCardArchived            = "card.archived"
 	EventCardTitleModified       = "card.title.modified"
 	EventCardDescriptionModified = "card.description.modified"
@@ -18,7 +19,7 @@ const (
 	EventCardLabelRemoved        = "card.label.removed"
 	EventColumnCreated           = "column.created"
 	EventColumnDeleted           = "column.deleted"
-	EventColumnReordered         = "column.reordered"
+	EventColumnReordered         = "column.reorder"
 	EventBoardUpdated            = "board.updated"
 )
 
@@ -58,4 +59,21 @@ type CardDescriptionModifiedPayload struct {
 	CardID          int64  `json:"card_id"`
 	Content         string `json:"content"`
 	ContentRendered string `json:"content_rendered"`
+}
+
+type CardReorderedPayload struct {
+	ColumnID int64   `json:"column_id"`
+	CardIDs  []int64 `json:"card_ids"`
+}
+
+type CardMovedPayload struct {
+	CardID       int64   `json:"card_id"`
+	FromColumnID int64   `json:"from_column_id"`
+	ToColumnID   int64   `json:"to_column_id"`
+	FromCardIDs  []int64 `json:"from_card_ids"`
+	ToCardIDs    []int64 `json:"to_card_ids"`
+}
+
+type ColumnReorderedPayload struct {
+	ColumnIDs []int64 `json:"column_ids"`
 }

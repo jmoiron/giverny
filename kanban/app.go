@@ -482,6 +482,12 @@ func (a *App) handleReorderColumns(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusInternalServerError, "reorder failed")
 		return
 	}
+	orderedIDs, err := a.columns.IDsByBoard(board.ID)
+	if err == nil {
+		a.publishBoardEvent(slug, EventColumnReordered, ColumnReorderedPayload{
+			ColumnIDs: orderedIDs,
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -760,10 +766,16 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
 	cardIDStr := chi.URLParam(r, "cardID")
 	cardID, err := parseID(cardIDStr)
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	prevCard, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading current card failed")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -786,6 +798,27 @@ func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {
 	if err := a.cards.Move(cardID, colID, pos); err != nil {
 		apiErr(w, http.StatusInternalServerError, "move failed")
 		return
+	}
+	if prevCard.ColumnID == colID {
+		cardIDs, err := a.cards.IDsByColumn(colID)
+		if err == nil {
+			a.publishBoardEvent(slug, EventCardReordered, CardReorderedPayload{
+				ColumnID: colID,
+				CardIDs:  cardIDs,
+			})
+		}
+	} else {
+		fromCardIDs, fromErr := a.cards.IDsByColumn(prevCard.ColumnID)
+		toCardIDs, toErr := a.cards.IDsByColumn(colID)
+		if fromErr == nil && toErr == nil {
+			a.publishBoardEvent(slug, EventCardMoved, CardMovedPayload{
+				CardID:       cardID,
+				FromColumnID: prevCard.ColumnID,
+				ToColumnID:   colID,
+				FromCardIDs:  fromCardIDs,
+				ToCardIDs:    toCardIDs,
+			})
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -866,6 +899,7 @@ func (a *App) handleRemoveCardLabel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleReorderCards(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
 	colIDStr := chi.URLParam(r, "colID")
 	colID, err := parseID(colIDStr)
 	if err != nil {
@@ -880,6 +914,13 @@ func (a *App) handleReorderCards(w http.ResponseWriter, r *http.Request) {
 	if err := a.cards.Reorder(colID, ids); err != nil {
 		apiErr(w, http.StatusInternalServerError, "reorder failed")
 		return
+	}
+	cardIDs, err := a.cards.IDsByColumn(colID)
+	if err == nil {
+		a.publishBoardEvent(slug, EventCardReordered, CardReorderedPayload{
+			ColumnID: colID,
+			CardIDs:  cardIDs,
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

@@ -200,6 +200,11 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
     .card-shadow();
     position: relative;
 
+    &.dragging-source {
+        opacity: 0.18;
+        border-color: var(--accent);
+    }
+
     .col-header {
         padding: 0.55rem 0.75rem;
         font-weight: 600;
@@ -208,6 +213,7 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        cursor: pointer;
 
         .col-name { flex: 1; }
 
@@ -378,9 +384,20 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
     user-select: none;
     transition: border-color 0.12s, box-shadow 0.12s;
 
+    &.dragging-source {
+        opacity: 0.14;
+        border-color: var(--accent);
+        cursor: move;
+    }
+
+
     &:hover {
         border-color: var(--accent);
         box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    &:active {
+        cursor: pointer;
     }
 
     .card-title {
@@ -394,6 +411,37 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
         gap: 0.35rem;
         margin-top: 0.5rem;
     }
+}
+
+.card-drop-placeholder,
+.column-drop-placeholder {
+    display: block;
+    box-sizing: border-box;
+    border: 2px dashed var(--accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+    flex-shrink: 0;
+}
+
+.card-drop-placeholder {
+    margin: 0;
+    min-height: 58px;
+}
+
+.column-drop-placeholder {
+    min-height: 180px;
+}
+
+body.drag-active,
+body.drag-active * {
+    cursor: no-drop !important;
+}
+
+body.drag-card .col-cards,
+body.drag-card .col-cards *,
+body.drag-column .board-columns,
+body.drag-column .board-columns * {
+    cursor: move !important;
 }
 
 .label-pill {

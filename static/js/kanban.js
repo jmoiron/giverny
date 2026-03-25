@@ -5,10 +5,38 @@ $(function() {
     var collapsedColumnsKey = 'giverny:collapsed-columns:' + board;
     var activeLabelIndex = -1;
     var visibleLabelMatches = [];
+    var dragState = {
+        cardId: null,
+        cardFromColumnId: null,
+        cardOriginalIndex: -1,
+        cardDraggedEl: null,
+        cardPlaceholder: null,
+        cardOriginalParent: null,
+        cardOriginalNextSibling: null,
+        columnId: null,
+        columnOriginalIndex: -1,
+        columnDraggedEl: null,
+        columnPlaceholder: null,
+        columnOriginalParent: null,
+        columnOriginalNextSibling: null,
+        suppressCardClickUntil: 0
+    };
 
     function post(url, data) {
         var body = data instanceof FormData ? data : new URLSearchParams(data);
         return fetch(url, { method: 'POST', body: body });
+    }
+
+    function postJSON(url, data) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    }
+
+    function nativeEvent(e) {
+        return e && (e.originalEvent || e);
     }
 
     function getCollapsedColumns() {
@@ -217,6 +245,180 @@ $(function() {
         return $pill;
     }
 
+    function getColumnCardIDs(columnId) {
+        return $('.col-cards[data-column-id="' + columnId + '"] .kanban-card').map(function() {
+            return Number($(this).data('id'));
+        }).get();
+    }
+
+    function reorderCardsInColumn(columnId, cardIDs) {
+        var $container = $('.col-cards[data-column-id="' + columnId + '"]').first();
+        if (!$container.length) return;
+        var cardsByID = {};
+        $container.find('.kanban-card').each(function() {
+            cardsByID[String($(this).data('id'))] = this;
+        });
+        for (var i = 0; i < cardIDs.length; i++) {
+            var el = cardsByID[String(cardIDs[i])];
+            if (el) $container.append(el);
+        }
+    }
+
+    function moveCardToColumn(cardId, columnId) {
+        var $card = $('.kanban-card[data-id="' + cardId + '"]').first();
+        var $container = $('.col-cards[data-column-id="' + columnId + '"]').first();
+        if (!$card.length || !$container.length) return;
+        $container.append($card);
+    }
+
+    function reorderColumns(columnIDs) {
+        var $wrap = $('.board-columns').first();
+        if (!$wrap.length) return;
+        var columnsByID = {};
+        $wrap.children('.board-column').each(function() {
+            columnsByID[String($(this).data('id'))] = this;
+        });
+        var $addWrap = $wrap.children('.add-column-wrap').first();
+        for (var i = 0; i < columnIDs.length; i++) {
+            var el = columnsByID[String(columnIDs[i])];
+            if (!el) continue;
+            if ($addWrap.length) {
+                $addWrap.before(el);
+            } else {
+                $wrap.append(el);
+            }
+        }
+    }
+
+    function shouldSuppressCardClick() {
+        return Date.now() < dragState.suppressCardClickUntil;
+    }
+
+    function markDragComplete() {
+        dragState.suppressCardClickUntil = Date.now() + 250;
+    }
+
+    function startDragMode(kind) {
+        document.body.classList.add('drag-active');
+        document.body.classList.remove('drag-card', 'drag-column');
+        document.body.classList.add(kind === 'card' ? 'drag-card' : 'drag-column');
+    }
+
+    function stopDragMode() {
+        document.body.classList.remove('drag-active', 'drag-card', 'drag-column');
+    }
+
+    function createDragPlaceholder($source, cls) {
+        var width = $source.outerWidth();
+        var height = $source.outerHeight();
+        return $('<div></div>')
+            .addClass(cls)
+            .css({
+                width: width + 'px',
+                height: height + 'px'
+            });
+    }
+
+    function setDragGhost(ev, el) {
+        if (!ev || !ev.dataTransfer || !el) return;
+        var ghost = el.cloneNode(true);
+        ghost.style.position = 'absolute';
+        ghost.style.top = '-10000px';
+        ghost.style.left = '-10000px';
+        ghost.style.width = el.getBoundingClientRect().width + 'px';
+        ghost.style.opacity = '0.7';
+        ghost.style.pointerEvents = 'none';
+        ghost.classList.add('drag-ghost');
+        document.body.appendChild(ghost);
+        ev.dataTransfer.setDragImage(ghost, 24, 20);
+        setTimeout(function() {
+            if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        }, 0);
+    }
+
+    function childIndex(el, selector) {
+        if (!el || !el.parentNode) return -1;
+        var matches = el.parentNode.querySelectorAll(selector);
+        for (var i = 0; i < matches.length; i++) {
+            if (matches[i] === el) return i;
+        }
+        return -1;
+    }
+
+    function findInsertBeforeByAxis(items, pointer, axis) {
+        for (var i = 0; i < items.length; i++) {
+            var rect = items[i].getBoundingClientRect();
+            var midpoint = axis === 'x' ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
+            if (pointer < midpoint) return items[i];
+        }
+        return null;
+    }
+
+    function isNoOpColumnPlacement(beforeEl, boardColumns) {
+        if (!dragState.columnDraggedEl) return false;
+        var currentIndex = childIndex(dragState.columnDraggedEl, '.board-column');
+        var targetIndex = beforeEl ? childIndex(beforeEl, '.board-column') : boardColumns.querySelectorAll('.board-column').length;
+        return targetIndex === currentIndex || targetIndex === currentIndex + 1;
+    }
+
+    function isNoOpCardPlacement(beforeEl, colCards) {
+        if (!dragState.cardDraggedEl) return false;
+        var targetColumnId = Number($(colCards).data('column-id'));
+        if (targetColumnId !== dragState.cardFromColumnId) return false;
+        var currentIndex = childIndex(dragState.cardDraggedEl, '.kanban-card');
+        var targetIndex = beforeEl ? childIndex(beforeEl, '.kanban-card') : colCards.querySelectorAll('.kanban-card').length;
+        return targetIndex === currentIndex || targetIndex === currentIndex + 1;
+    }
+
+    function resetCardDrag() {
+        if (dragState.cardPlaceholder && dragState.cardPlaceholder.parentNode) {
+            dragState.cardPlaceholder.parentNode.removeChild(dragState.cardPlaceholder);
+        }
+        if (dragState.cardDraggedEl) {
+            $(dragState.cardDraggedEl).removeClass('dragging-source');
+        }
+        dragState.cardId = null;
+        dragState.cardFromColumnId = null;
+        dragState.cardOriginalIndex = -1;
+        dragState.cardDraggedEl = null;
+        dragState.cardPlaceholder = null;
+        dragState.cardOriginalParent = null;
+        dragState.cardOriginalNextSibling = null;
+    }
+
+    function resetColumnDrag() {
+        if (dragState.columnPlaceholder && dragState.columnPlaceholder.parentNode) {
+            dragState.columnPlaceholder.parentNode.removeChild(dragState.columnPlaceholder);
+        }
+        if (dragState.columnDraggedEl) {
+            $(dragState.columnDraggedEl).removeClass('dragging-source');
+        }
+        dragState.columnId = null;
+        dragState.columnOriginalIndex = -1;
+        dragState.columnDraggedEl = null;
+        dragState.columnPlaceholder = null;
+        dragState.columnOriginalParent = null;
+        dragState.columnOriginalNextSibling = null;
+    }
+
+    function restoreCardDragPosition() {
+        if (!dragState.cardDraggedEl || !dragState.cardOriginalParent) return;
+        if (dragState.cardOriginalNextSibling && dragState.cardOriginalNextSibling.parentNode === dragState.cardOriginalParent) {
+            dragState.cardOriginalParent.insertBefore(dragState.cardDraggedEl, dragState.cardOriginalNextSibling);
+            return;
+        }
+        dragState.cardOriginalParent.appendChild(dragState.cardDraggedEl);
+    }
+
+    function restoreColumnDragPosition() {
+        if (!dragState.columnDraggedEl || !dragState.columnOriginalParent) return;
+        if (dragState.columnOriginalNextSibling && dragState.columnOriginalNextSibling.parentNode === dragState.columnOriginalParent) {
+            dragState.columnOriginalParent.insertBefore(dragState.columnDraggedEl, dragState.columnOriginalNextSibling);
+            return;
+        }
+        dragState.columnOriginalParent.appendChild(dragState.columnDraggedEl);
+    }
+
     function getActiveCardForm(cardId) {
         var $form = $('#card-detail-form');
         if (!$form.length) return $();
@@ -293,13 +495,39 @@ $(function() {
         showCardEditWarning($form);
     }
 
+    function applyCardReordered(payload) {
+        if (!payload || !payload.column_id || !payload.card_ids) return;
+        reorderCardsInColumn(payload.column_id, payload.card_ids);
+    }
+
+    function applyCardMoved(payload) {
+        if (!payload || !payload.from_column_id || !payload.to_column_id) return;
+        moveCardToColumn(payload.card_id, payload.to_column_id);
+        reorderCardsInColumn(payload.from_column_id, payload.from_card_ids || []);
+        reorderCardsInColumn(payload.to_column_id, payload.to_card_ids || []);
+    }
+
+    function applyColumnReordered(payload) {
+        if (!payload || !payload.column_ids) return;
+        reorderColumns(payload.column_ids);
+    }
+
     function applyBoardEvent(evt) {
         switch (evt.type) {
+        case 'card.reorder':
+            applyCardReordered(evt.payload);
+            break;
+        case 'card.move':
+            applyCardMoved(evt.payload);
+            break;
         case 'card.title.modified':
             applyCardTitleModified(evt.payload);
             break;
         case 'card.description.modified':
             applyCardDescriptionModified(evt.payload);
+            break;
+        case 'column.reorder':
+            applyColumnReordered(evt.payload);
             break;
         case 'card.label.added':
             applyCardLabelAdded(evt.payload);
@@ -587,6 +815,7 @@ $(function() {
     var $cardModal = $('#card-modal');
 
     $(document).on('click', '.kanban-card', function() {
+        if (shouldSuppressCardClick()) return;
         var cardId = $(this).data('id');
         fetch('/boards/' + board + '/cards/' + cardId)
             .then(function(r) { return r.text(); })
@@ -605,6 +834,178 @@ $(function() {
                 $cardModal.addClass('active');
             });
     });
+
+    document.addEventListener('dragstart', function(ev) {
+        var header = ev.target.closest('.col-header');
+        if (header) {
+            if (ev.target.closest('.col-actions')) {
+                ev.preventDefault();
+                return;
+            }
+            var $column = $(header).closest('.board-column');
+            dragState.columnId = Number($column.data('id'));
+            dragState.columnOriginalIndex = $column.index();
+            dragState.columnDraggedEl = $column[0];
+            dragState.columnOriginalParent = $column[0].parentNode;
+            dragState.columnOriginalNextSibling = $column[0].nextSibling;
+            dragState.columnPlaceholder = null;
+            if (ev.dataTransfer) {
+                ev.dataTransfer.effectAllowed = 'move';
+                ev.dataTransfer.setData('text/plain', 'column:' + dragState.columnId);
+            }
+            setDragGhost(ev, $column[0]);
+            startDragMode('column');
+            $column.addClass('dragging-source');
+            return;
+        }
+
+        var card = ev.target.closest('.kanban-card');
+        if (!card) return;
+        var $card = $(card);
+        dragState.cardId = Number($card.data('id'));
+        dragState.cardFromColumnId = Number($card.closest('.col-cards').data('column-id'));
+        dragState.cardOriginalIndex = $card.index();
+        dragState.cardDraggedEl = card;
+        dragState.cardOriginalParent = card.parentNode;
+        dragState.cardOriginalNextSibling = card.nextSibling;
+        dragState.cardPlaceholder = null;
+        if (ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = 'move';
+            ev.dataTransfer.setData('text/plain', 'card:' + dragState.cardId);
+        }
+        setDragGhost(ev, card);
+        startDragMode('card');
+        $card.addClass('dragging-source');
+    }, true);
+
+    document.addEventListener('dragover', function(ev) {
+        var boardColumns = ev.target.closest('.board-columns');
+        if (boardColumns && dragState.columnId) {
+            ev.preventDefault();
+            var placeholder = dragState.columnPlaceholder;
+            var columns = boardColumns.querySelectorAll('.board-column:not(.dragging-source)');
+            var before = findInsertBeforeByAxis(columns, ev.clientX, 'x');
+            if (isNoOpColumnPlacement(before, boardColumns)) {
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.removeChild(placeholder);
+                }
+                return;
+            }
+            if (!placeholder) {
+                placeholder = createDragPlaceholder($(dragState.columnDraggedEl), 'column-drop-placeholder')[0];
+                dragState.columnPlaceholder = placeholder;
+            }
+            if (before) {
+                before.parentNode.insertBefore(placeholder, before);
+            } else {
+                var addWrap = boardColumns.querySelector('.add-column-wrap');
+                if (addWrap) {
+                    addWrap.parentNode.insertBefore(placeholder, addWrap);
+                } else {
+                    boardColumns.appendChild(placeholder);
+                }
+            }
+            return;
+        }
+
+        var colCards = ev.target.closest('.col-cards');
+        if (colCards && dragState.cardId) {
+            ev.preventDefault();
+            var cardPlaceholder = dragState.cardPlaceholder;
+            var cards = colCards.querySelectorAll('.kanban-card:not(.dragging-source)');
+            var beforeCard = findInsertBeforeByAxis(cards, ev.clientY, 'y');
+            if (isNoOpCardPlacement(beforeCard, colCards)) {
+                if (cardPlaceholder && cardPlaceholder.parentNode) {
+                    cardPlaceholder.parentNode.removeChild(cardPlaceholder);
+                }
+                return;
+            }
+            if (!cardPlaceholder) {
+                cardPlaceholder = createDragPlaceholder($(dragState.cardDraggedEl), 'card-drop-placeholder')[0];
+                dragState.cardPlaceholder = cardPlaceholder;
+            }
+            if (beforeCard) {
+                beforeCard.parentNode.insertBefore(cardPlaceholder, beforeCard);
+            } else {
+                colCards.appendChild(cardPlaceholder);
+            }
+        }
+    }, true);
+
+    document.addEventListener('drop', function(ev) {
+        var boardColumns = ev.target.closest('.board-columns');
+        if (boardColumns && dragState.columnId && dragState.columnDraggedEl) {
+            ev.preventDefault();
+            if (dragState.columnPlaceholder && dragState.columnPlaceholder.parentNode) {
+                dragState.columnPlaceholder.parentNode.insertBefore(dragState.columnDraggedEl, dragState.columnPlaceholder);
+            } else {
+                restoreColumnDragPosition();
+            }
+            var ids = $(boardColumns).children('.board-column').map(function() {
+                return Number($(this).data('id'));
+            }).get();
+            var changed = ids.indexOf(dragState.columnId) !== dragState.columnOriginalIndex;
+            if (changed) {
+                postJSON('/boards/' + board + '/columns/reorder', ids);
+                markDragComplete();
+            }
+            resetColumnDrag();
+            stopDragMode();
+            return;
+        }
+
+        var colCards = ev.target.closest('.col-cards');
+        if (colCards && dragState.cardId && dragState.cardDraggedEl) {
+            ev.preventDefault();
+            if (dragState.cardPlaceholder && dragState.cardPlaceholder.parentNode) {
+                dragState.cardPlaceholder.parentNode.insertBefore(dragState.cardDraggedEl, dragState.cardPlaceholder);
+            } else {
+                restoreCardDragPosition();
+            }
+            var toColumnId = Number($(colCards).data('column-id'));
+            var cardId = dragState.cardId;
+            var toCardIDs = getColumnCardIDs(toColumnId);
+            var nextIndex = toCardIDs.indexOf(cardId);
+            if (dragState.cardFromColumnId === toColumnId) {
+                if (nextIndex !== dragState.cardOriginalIndex) {
+                    postJSON('/boards/' + board + '/columns/' + toColumnId + '/cards/reorder', toCardIDs);
+                    markDragComplete();
+                }
+                resetCardDrag();
+                stopDragMode();
+                return;
+            }
+            post('/boards/' + board + '/cards/' + cardId + '/move', {
+                column_id: toColumnId,
+                position: nextIndex
+            });
+            markDragComplete();
+            resetCardDrag();
+            stopDragMode();
+        }
+    }, true);
+
+    document.addEventListener('dragend', function(ev) {
+        if (ev.target.closest('.col-header')) {
+            if (dragState.columnDraggedEl && dragState.columnPlaceholder && dragState.columnPlaceholder.parentNode) {
+                dragState.columnPlaceholder.parentNode.insertBefore(dragState.columnDraggedEl, dragState.columnPlaceholder);
+            } else {
+                restoreColumnDragPosition();
+            }
+            resetColumnDrag();
+            stopDragMode();
+            return;
+        }
+        if (ev.target.closest('.kanban-card')) {
+            if (dragState.cardDraggedEl && dragState.cardPlaceholder && dragState.cardPlaceholder.parentNode) {
+                dragState.cardPlaceholder.parentNode.insertBefore(dragState.cardDraggedEl, dragState.cardPlaceholder);
+            } else {
+                restoreCardDragPosition();
+            }
+            resetCardDrag();
+            stopDragMode();
+        }
+    }, true);
 
     // Close card modal
     $(document).on('click', '#card-modal-close', function(e) {
@@ -718,7 +1119,7 @@ $(function() {
         var cardId = $form.data('id');
         var colId = $(this).val();
         post('/boards/' + board + '/cards/' + cardId + '/move', { column_id: colId, position: 0 })
-            .then(function() { location.reload(); });
+            .then(function() {});
     });
 
     // Archive card

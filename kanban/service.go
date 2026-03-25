@@ -209,6 +209,12 @@ func (s *ColumnService) Reorder(boardID int64, ids []int64) error {
 	})
 }
 
+func (s *ColumnService) IDsByBoard(boardID int64) ([]int64, error) {
+	var ids []int64
+	err := s.db.Select(&ids, `SELECT id FROM board_column WHERE board_id=? ORDER BY position, id`, boardID)
+	return ids, err
+}
+
 // CardService methods
 
 func (s *CardService) Create(columnID, boardID, createdBy int64, title, content, color string) (*Card, error) {
@@ -308,11 +314,58 @@ func (s *CardService) RemoveLabel(cardID, labelID int64) error {
 }
 
 func (s *CardService) Move(id, columnID int64, position int) error {
-	_, err := s.db.Exec(
-		`UPDATE card SET column_id=?, position=?, updated_at=datetime('now') WHERE id=?`,
-		columnID, position, id,
-	)
-	return err
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		var current Card
+		if err := tx.Get(&current, `SELECT * FROM card WHERE id=?`, id); err != nil {
+			return err
+		}
+
+		if current.ColumnID == columnID {
+			ids, err := orderedCardIDsTx(tx, columnID, id)
+			if err != nil {
+				return err
+			}
+			if position < 0 {
+				position = 0
+			}
+			if position > len(ids) {
+				position = len(ids)
+			}
+			ids = insertIDAt(ids, position, id)
+			if err := updateCardPositionsTx(tx, columnID, ids); err != nil {
+				return err
+			}
+			_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, id)
+			return err
+		}
+
+		sourceIDs, err := orderedCardIDsTx(tx, current.ColumnID, id)
+		if err != nil {
+			return err
+		}
+		destIDs, err := orderedCardIDsTx(tx, columnID, id)
+		if err != nil {
+			return err
+		}
+		if position < 0 {
+			position = 0
+		}
+		if position > len(destIDs) {
+			position = len(destIDs)
+		}
+		destIDs = insertIDAt(destIDs, position, id)
+
+		if err := updateCardPositionsTx(tx, current.ColumnID, sourceIDs); err != nil {
+			return err
+		}
+		for i, cardID := range destIDs {
+			if _, err := tx.Exec(`UPDATE card SET column_id=?, position=? WHERE id=?`, columnID, i, cardID); err != nil {
+				return fmt.Errorf("move card %d into column %d: %w", cardID, columnID, err)
+			}
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, id)
+		return err
+	})
 }
 
 func (s *CardService) Archive(id int64) error {
@@ -322,13 +375,51 @@ func (s *CardService) Archive(id int64) error {
 
 func (s *CardService) Reorder(columnID int64, ids []int64) error {
 	return db.With(s.db, func(tx *sqlx.Tx) error {
-		for i, id := range ids {
-			if _, err := tx.Exec(`UPDATE card SET position=? WHERE id=? AND column_id=?`, i, id, columnID); err != nil {
-				return fmt.Errorf("reorder card %d: %w", id, err)
-			}
-		}
-		return nil
+		return updateCardPositionsTx(tx, columnID, ids)
 	})
+}
+
+func (s *CardService) IDsByColumn(columnID int64) ([]int64, error) {
+	var ids []int64
+	err := s.db.Select(&ids, `SELECT id FROM card WHERE column_id=? AND archived_at IS NULL ORDER BY position, id`, columnID)
+	return ids, err
+}
+
+func orderedCardIDsTx(tx *sqlx.Tx, columnID, excludeID int64) ([]int64, error) {
+	var ids []int64
+	query := `SELECT id FROM card WHERE column_id=? AND archived_at IS NULL`
+	args := []any{columnID}
+	if excludeID != 0 {
+		query += ` AND id<>?`
+		args = append(args, excludeID)
+	}
+	query += ` ORDER BY position, id`
+	if err := tx.Select(&ids, query, args...); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func updateCardPositionsTx(tx *sqlx.Tx, columnID int64, ids []int64) error {
+	for i, id := range ids {
+		if _, err := tx.Exec(`UPDATE card SET position=? WHERE id=? AND column_id=?`, i, id, columnID); err != nil {
+			return fmt.Errorf("reorder card %d: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func insertIDAt(ids []int64, pos int, id int64) []int64 {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(ids) {
+		pos = len(ids)
+	}
+	ids = append(ids, 0)
+	copy(ids[pos+1:], ids[pos:])
+	ids[pos] = id
+	return ids
 }
 
 func (s *CardService) labelsForCard(cardID int64) ([]*Label, error) {
