@@ -60,6 +60,10 @@ func (a *App) RecentCards(limit int, user *gauth.User) ([]*DashboardCard, error)
 	return a.cards.Recent(limit, user != nil && user.IsAdmin())
 }
 
+func (a *App) RenderDashboardCards(r *http.Request, cards []*DashboardCard) ([]*RenderedDashboardCard, error) {
+	return a.renderDashboardCards(r, cards)
+}
+
 func (a *App) Migrate() error {
 	m, err := monarch.NewManager(a.db)
 	if err != nil {
@@ -267,14 +271,83 @@ func formatTimestampForUser(ctx context.Context, t time.Time) string {
 }
 
 func (a *App) renderCardSnippet(r *http.Request, card *Card) (string, error) {
+	return a.renderCardSnippetWithOptions(r, card, true)
+}
+
+func (a *App) renderCardSnippetWithOptions(r *http.Request, card *Card, draggable bool) (string, error) {
 	reg := mtr.RegistryFromContext(r.Context())
 	var buf bytes.Buffer
 	if err := reg.Render(&buf, "kanban/card_snippet.html", mtr.Ctx{
-		"card": card,
+		"card":      card,
+		"draggable": draggable,
 	}); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+type RenderedCard struct {
+	Card *Card
+	HTML template.HTML
+}
+
+type ColumnWithRenderedCards struct {
+	*Column
+	Cards []*RenderedCard
+}
+
+type RenderedDashboardCard struct {
+	*DashboardCard
+	HTML template.HTML
+}
+
+func (a *App) renderCards(r *http.Request, cards []*Card, draggable bool) ([]*RenderedCard, error) {
+	rendered := make([]*RenderedCard, 0, len(cards))
+	for _, card := range cards {
+		html, err := a.renderCardSnippetWithOptions(r, card, draggable)
+		if err != nil {
+			return nil, err
+		}
+		rendered = append(rendered, &RenderedCard{
+			Card: card,
+			HTML: template.HTML(html),
+		})
+	}
+	return rendered, nil
+}
+
+func (a *App) buildRenderedColumns(r *http.Request, cols []*Column, cards []*Card) ([]*ColumnWithRenderedCards, error) {
+	cardsByCol := make(map[int64][]*Card)
+	for _, c := range cards {
+		cardsByCol[c.ColumnID] = append(cardsByCol[c.ColumnID], c)
+	}
+	result := make([]*ColumnWithRenderedCards, len(cols))
+	for i, col := range cols {
+		renderedCards, err := a.renderCards(r, cardsByCol[col.ID], true)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = &ColumnWithRenderedCards{
+			Column: col,
+			Cards:  renderedCards,
+		}
+	}
+	return result, nil
+}
+
+func (a *App) renderDashboardCards(r *http.Request, cards []*DashboardCard) ([]*RenderedDashboardCard, error) {
+	rendered := make([]*RenderedDashboardCard, 0, len(cards))
+	for _, card := range cards {
+		html, err := a.renderCardSnippetWithOptions(r, &card.Card, false)
+		if err != nil {
+			return nil, err
+		}
+		rendered = append(rendered, &RenderedDashboardCard{
+			DashboardCard: card,
+			HTML:          template.HTML(html),
+		})
+	}
+	return rendered, nil
 }
 
 func (a *App) cardResponse(r *http.Request, card *Card) map[string]any {
@@ -533,14 +606,23 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	columnsWithCards := BuildColumns(cols, cards)
+	columnsWithCards, err := a.buildRenderedColumns(r, cols, cards)
+	if err != nil {
+		app.Http500("rendering board cards", w, err)
+		return
+	}
+	renderedArchived, err := a.renderCards(r, archivedCards, false)
+	if err != nil {
+		app.Http500("rendering archived cards", w, err)
+		return
+	}
 
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board.html", mtr.Ctx{
 		"title":     board.Name,
 		"board":     board,
 		"columns":   columnsWithCards,
-		"archived":  archivedCards,
+		"archived":  renderedArchived,
 		"user":      user,
 		"isAdmin":   user.IsAdmin(),
 		"mainClass": "board-main",

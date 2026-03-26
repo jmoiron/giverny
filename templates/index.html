@@ -28,16 +28,7 @@
                 {{range .recentCards}}
                 <div class="dashboard-card-item">
                     <a class="dashboard-card-link" href="/boards/{{.BoardSlug}}#card-{{.ID}}">
-                    <div class="kanban-card{{if .Color}} has-card-color{{end}}" data-id="{{.ID}}" data-card-color="{{.Color}}"{{if .Color}} style="--card-color: {{.Color}}"{{end}}>
-                        <div class="card-title">{{.Title}}</div>
-                        {{if .Labels}}
-                        <div class="card-labels">
-                            {{range .Labels}}
-                            <span class="label-pill {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
-                            {{end}}
-                        </div>
-                        {{end}}
-                    </div>
+                    {{.HTML}}
                     </a>
                     <a class="dashboard-card-board-link" href="/boards/{{.BoardSlug}}">{{.BoardName}}</a>
                 </div>

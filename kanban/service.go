@@ -368,6 +368,20 @@ func (s *CardService) Get(id int64) (*Card, error) {
 		return &card, err
 	}
 	card.Checklist, err = s.checklistForCard(id)
+	if err != nil {
+		return &card, err
+	}
+	if card.Checklist != nil {
+		card.ChecklistTotal = len(card.Checklist.Items)
+		for _, item := range card.Checklist.Items {
+			if item != nil && item.Done {
+				card.ChecklistDone++
+			}
+		}
+		if card.ChecklistTotal > 0 {
+			card.ChecklistPct = int(float64(card.ChecklistDone) / float64(card.ChecklistTotal) * 100)
+		}
+	}
 	return &card, err
 }
 
@@ -386,6 +400,9 @@ func (s *CardService) ListByBoard(boardID int64) ([]*Card, error) {
 	if err := s.attachAssignees(cards); err != nil {
 		return nil, err
 	}
+	if err := s.attachChecklistSummary(cards); err != nil {
+		return nil, err
+	}
 	return cards, err
 }
 
@@ -402,6 +419,9 @@ func (s *CardService) ListArchivedByBoard(boardID int64) ([]*Card, error) {
 		return nil, err
 	}
 	if err := s.attachAssignees(cards); err != nil {
+		return nil, err
+	}
+	if err := s.attachChecklistSummary(cards); err != nil {
 		return nil, err
 	}
 	return cards, nil
@@ -432,6 +452,9 @@ func (s *CardService) Recent(limit int, isAdmin bool) ([]*DashboardCard, error) 
 		return nil, err
 	}
 	if err := s.attachAssignees(cardPtrs); err != nil {
+		return nil, err
+	}
+	if err := s.attachChecklistSummary(cardPtrs); err != nil {
 		return nil, err
 	}
 	return cards, nil
@@ -1062,6 +1085,54 @@ func (s *CardService) attachAssignees(cards []*Card) error {
 			CreatedAt:       r.CreatedAt,
 			LastLoginAt:     r.LastLoginAt,
 		})
+	}
+	return nil
+}
+
+func (s *CardService) attachChecklistSummary(cards []*Card) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(cards))
+	byCard := make(map[int64]*Card, len(cards))
+	for _, card := range cards {
+		card.ChecklistDone = 0
+		card.ChecklistTotal = 0
+		card.ChecklistPct = 0
+		ids = append(ids, card.ID)
+		byCard[card.ID] = card
+	}
+	query, args, err := sqlx.In(`
+		SELECT c.card_id,
+		       COUNT(ci.id) AS total_count,
+		       COALESCE(SUM(CASE WHEN ci.done=1 THEN 1 ELSE 0 END), 0) AS done_count
+		FROM checklist c
+		LEFT JOIN checklist_item ci ON ci.checklist_id = c.id
+		WHERE c.card_id IN (?)
+		GROUP BY c.card_id
+	`, ids)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		CardID     int64 `db:"card_id"`
+		TotalCount int   `db:"total_count"`
+		DoneCount  int   `db:"done_count"`
+	}
+	var rows []row
+	if err := s.db.Select(&rows, query, args...); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		card := byCard[r.CardID]
+		if card == nil {
+			continue
+		}
+		card.ChecklistTotal = r.TotalCount
+		card.ChecklistDone = r.DoneCount
+		if r.TotalCount > 0 {
+			card.ChecklistPct = int(float64(r.DoneCount) / float64(r.TotalCount) * 100)
+		}
 	}
 	return nil
 }

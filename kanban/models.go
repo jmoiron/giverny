@@ -55,6 +55,9 @@ type Card struct {
 	Labels          []*Label      `db:"-"`
 	Assignees       []*gauth.User `db:"-"`
 	Checklist       *Checklist    `db:"-"`
+	ChecklistDone   int           `db:"-"`
+	ChecklistTotal  int           `db:"-"`
+	ChecklistPct    int           `db:"-"`
 }
 
 type CardSubscription struct {

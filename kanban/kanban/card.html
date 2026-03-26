@@ -65,6 +65,10 @@
                         {{end}}
                     </div>
                     <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
+                    <div class="card-actions is-hidden">
+                        <a href="#" class="card-cancel-link" id="card-edit-cancel">cancel</a>
+                        <button type="submit">save</button>
+                    </div>
                 </div>
 
                 <div class="card-section checklist-section{{if not .checklist.Exists}} is-empty{{end}}" id="card-checklist-section">
@@ -91,11 +95,6 @@
                         <button type="button" class="quick-control-btn checklist-toggle-completed-btn" id="checklist-toggle-completed-btn">hide completed</button>
                         <button type="button" class="quick-control-btn checklist-delete-btn" id="checklist-delete-btn">delete</button>
                     </div>
-                </div>
-
-                <div class="card-actions is-hidden">
-                    <a href="#" class="card-cancel-link" id="card-edit-cancel">cancel</a>
-                    <button type="submit">save</button>
                 </div>
             </div>
 
@@ -203,8 +202,8 @@
                     <input type="date" id="card-start-date-input" value="{{if .card.StartDate}}{{.card.StartDate.Format "2006-01-02"}}{{end}}">
                 </div>
                 <div class="quick-control-divider"></div>
+                <div class="quick-section-title">move</div>
                 <div class="move-row quick-column-row">
-                    <label>column</label>
                     <select name="column_id" id="card-move-select">
                         {{range .columns}}
                         <option value="{{.ID}}"{{if eq .ID $.card.ColumnID}} selected{{end}}>{{.Name}}</option>

@@ -253,8 +253,13 @@ func home(kanbanApp *kanban.App) http.HandlerFunc {
 				app.Http500("loading recent cards", w, err)
 				return
 			}
+			renderedRecentCards, err := kanbanApp.RenderDashboardCards(r, recentCards)
+			if err != nil {
+				app.Http500("rendering recent cards", w, err)
+				return
+			}
 			ctx["recentBoards"] = recentBoards
-			ctx["recentCards"] = recentCards
+			ctx["recentCards"] = renderedRecentCards
 		}
 		if err := reg.RenderWithBase(w, "base", "templates/index.html", ctx); err != nil {
 			app.Http500("rendering index", w, err)

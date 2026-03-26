@@ -1,5 +1,13 @@
-<div class="kanban-card{{if .card.Color}} has-card-color{{end}}" data-id="{{.card.ID}}" draggable="true" data-card-color="{{.card.Color}}"{{if .card.Color}} style="--card-color: {{.card.Color}}"{{end}}>
+<div class="kanban-card{{if .card.Color}} has-card-color{{end}}" data-id="{{.card.ID}}"{{if .draggable}} draggable="true"{{end}} data-card-color="{{.card.Color}}"{{if .card.Color}} style="--card-color: {{.card.Color}}"{{end}}>
     <div class="card-title">{{.card.Title}}</div>
+    {{if .card.ChecklistTotal}}
+    <div class="kanban-card-checklist-progress{{if .card.Color}} has-card-color{{end}}"{{if .card.Color}} style="--card-color: {{.card.Color}}"{{end}}>
+        <span class="kanban-card-checklist-copy">{{.card.ChecklistDone}}/{{.card.ChecklistTotal}} {{.card.ChecklistPct}}%</span>
+        <span class="kanban-card-checklist-bar">
+            <span class="kanban-card-checklist-fill" style="width: {{.card.ChecklistPct}}%;"></span>
+        </span>
+    </div>
+    {{end}}
     {{if .card.Labels}}
     <div class="card-labels">
         {{range .card.Labels}}

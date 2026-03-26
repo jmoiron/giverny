@@ -264,6 +264,7 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
     .col-cards {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 0.5rem;
         display: flex;
         flex-direction: column;
@@ -460,6 +461,47 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
     .card-title {
         font-size: 0.88rem;
         line-height: 1.45;
+    }
+
+    .kanban-card-checklist-progress {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-top: 0.45rem;
+
+        &.has-card-color {
+            .kanban-card-checklist-fill {
+                background: linear-gradient(
+                    90deg,
+                    color-mix(in srgb, var(--card-color) 58%, #ffffff 42%),
+                    color-mix(in srgb, var(--card-color) 82%, #000000 18%)
+                );
+            }
+        }
+    }
+
+    .kanban-card-checklist-copy {
+        flex: 0 0 auto;
+        font-size: 0.72rem;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .kanban-card-checklist-bar {
+        flex: 1 1 auto;
+        height: 8px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface) 40%, var(--border) 60%);
+        overflow: hidden;
+    }
+
+    .kanban-card-checklist-fill {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--sky), var(--green));
     }
 
     .card-labels {
@@ -954,15 +996,11 @@ body.drag-column .board-columns * {
     }
 
     .quick-column-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.35rem;
-        margin-top: 0.2rem;
+        margin-top: 0;
 
-        label {
-            font-size: 0.78rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
+        select {
+            width: 100%;
+            flex: 1 1 auto;
         }
     }
 
@@ -1287,6 +1325,7 @@ body.drag-column .board-columns * {
     .card-actions {
         display: flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 0.5rem;
         margin-top: 0.75rem;
 
