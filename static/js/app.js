@@ -29,44 +29,50 @@ $(function() {
 
     // Reusable confirmation modal
     var $modal = $('#confirm-modal');
-    var pendingForm = null;
+    var pendingAction = null;
+
+    function hideConfirmModal() {
+        $modal.removeClass('active');
+        pendingAction = null;
+    }
+
+    window.showConfirmModal = function(msg, action) {
+        pendingAction = action || null;
+        $('#confirm-message').text(msg || '');
+        $modal.addClass('active');
+    };
 
     $(document).on('click', '[data-submit]', function() {
         var form = document.getElementById($(this).data('submit'));
         if (!form) return;
         var msg = $(this).data('confirm');
         if (msg) {
-            pendingForm = form;
-            $('#confirm-message').text(msg);
-            $modal.addClass('active');
+            window.showConfirmModal(msg, function() { form.submit(); });
         } else {
             form.submit();
         }
     });
 
     $('#confirm-cancel').on('click', function() {
-        $modal.removeClass('active');
-        pendingForm = null;
+        hideConfirmModal();
     });
 
     $('#confirm-ok').on('click', function() {
-        $modal.removeClass('active');
-        if (pendingForm) pendingForm.submit();
-        pendingForm = null;
+        var action = pendingAction;
+        hideConfirmModal();
+        if (action) action();
     });
 
     $modal.on('click', function(e) {
         if (e.target === this) {
-            $modal.removeClass('active');
-            pendingForm = null;
+            hideConfirmModal();
         }
     });
 
     $(document).on('keydown', function(e) {
         if (e.key !== 'Escape') return;
         if ($modal.hasClass('active')) {
-            $modal.removeClass('active');
-            pendingForm = null;
+            hideConfirmModal();
         }
         $('.modal-overlay.active').removeClass('active');
         $trigger.removeClass('open');
@@ -80,6 +86,10 @@ $(function() {
             $el.removeClass('fa-copy').addClass('fa-check');
             setTimeout(() => $el.removeClass('fa-check').addClass('fa-copy'), 1500);
         });
+    });
+
+    $(document).on('click', '.nav-icon-link[href="#"]', function(e) {
+        e.preventDefault();
     });
 
     $(document).on('input', 'input.error', function() {

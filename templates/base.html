@@ -43,8 +43,12 @@
                 {{end}}
                 <div class="nav-right">
                     {{if .user}}
-                    <i class="fa-solid fa-magnifying-glass nav-icon" title="search"></i>
-                    <i class="fa-solid fa-bell nav-icon" title="notifications"></i>
+                    <a href="#" class="nav-icon-link" title="search" aria-label="search">
+                        <i class="fa-solid fa-magnifying-glass nav-icon"></i>
+                    </a>
+                    <a href="#" class="nav-icon-link" title="notifications" aria-label="notifications">
+                        <i class="fa-solid fa-bell nav-icon"></i>
+                    </a>
                     <div class="user-menu-wrap">
                         <button class="user-menu-trigger" id="user-menu-trigger">
                             {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{else}}<span class="avatar avatar-fallback" aria-hidden="true"></span>{{end}}

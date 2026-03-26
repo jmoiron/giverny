@@ -1,7 +1,53 @@
 <div class="landing">
 {{if .user}}
-    <h2>boards</h2>
-    <p>No boards have been created yet.</p>
+    <h1 class="hero-title">Giverny</h1>
+    <div class="dashboard-sections">
+        <section class="dashboard-section boards-wrap">
+            <h2>boards</h2>
+            {{if .recentBoards}}
+            <div class="boards-grid">
+                {{range .recentBoards}}
+                <div class="board-card-wrap">
+                    <span class="visibility-badge board-visibility-badge">{{.Visibility}}</span>
+                    <a href="/boards/{{.Slug}}" class="board-card">
+                        <h3>{{.Name}}</h3>
+                        {{if .Description}}<p>{{.Description}}</p>{{end}}
+                    </a>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <p class="empty-state">no boards with cards yet</p>
+            {{end}}
+        </section>
+
+        <section class="dashboard-section boards-wrap dashboard-cards">
+            <h2>cards</h2>
+            {{if .recentCards}}
+            <div class="dashboard-card-list">
+                {{range .recentCards}}
+                <div class="dashboard-card-item">
+                    <a class="dashboard-card-link" href="/boards/{{.BoardSlug}}#card-{{.ID}}">
+                    <div class="kanban-card{{if .Color}} has-card-color{{end}}" data-id="{{.ID}}" data-card-color="{{.Color}}"{{if .Color}} style="--card-color: {{.Color}}"{{end}}>
+                        <div class="card-title">{{.Title}}</div>
+                        {{if .Labels}}
+                        <div class="card-labels">
+                            {{range .Labels}}
+                            <span class="label-pill {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>
+                            {{end}}
+                        </div>
+                        {{end}}
+                    </div>
+                    </a>
+                    <a class="dashboard-card-board-link" href="/boards/{{.BoardSlug}}">{{.BoardName}}</a>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <p class="empty-state">no cards yet</p>
+            {{end}}
+        </section>
+    </div>
 {{else}}
     <h1 class="hero-title">Giverny</h1>
     <p>Please <a href="/login/">log in</a> to continue.</p>

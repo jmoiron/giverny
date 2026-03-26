@@ -21,6 +21,12 @@ type ColumnWithCards struct {
 	Cards []*Card
 }
 
+type DashboardCard struct {
+	Card
+	BoardName string `db:"board_name"`
+	BoardSlug string `db:"board_slug"`
+}
+
 type BoardService struct{ db db.DB }
 type ColumnService struct{ db db.DB }
 type CardService struct{ db db.DB }
@@ -155,6 +161,28 @@ func (s *BoardService) List(isAdmin bool) ([]*Board, error) {
 	} else {
 		err = s.db.Select(&boards, `SELECT * FROM board WHERE visibility IN ('open','public') ORDER BY name`)
 	}
+	return boards, err
+}
+
+func (s *BoardService) RecentByCardActivity(limit int, isAdmin bool) ([]*Board, error) {
+	var boards []*Board
+	query := `
+		SELECT b.*
+		FROM board b
+		JOIN (
+			SELECT board_id, MAX(created_at) AS last_card_at
+			FROM card
+			WHERE archived_at IS NULL
+			GROUP BY board_id
+		) rc ON rc.board_id = b.id
+	`
+	args := []any{}
+	if !isAdmin {
+		query += ` WHERE b.visibility IN ('open','public')`
+	}
+	query += ` ORDER BY rc.last_card_at DESC, b.name LIMIT ?`
+	args = append(args, limit)
+	err := s.db.Select(&boards, query, args...)
 	return boards, err
 }
 
@@ -336,6 +364,10 @@ func (s *CardService) Get(id int64) (*Card, error) {
 		return &card, err
 	}
 	card.Assignees, err = s.assigneesForCard(id)
+	if err != nil {
+		return &card, err
+	}
+	card.Checklist, err = s.checklistForCard(id)
 	return &card, err
 }
 
@@ -370,6 +402,36 @@ func (s *CardService) ListArchivedByBoard(boardID int64) ([]*Card, error) {
 		return nil, err
 	}
 	if err := s.attachAssignees(cards); err != nil {
+		return nil, err
+	}
+	return cards, nil
+}
+
+func (s *CardService) Recent(limit int, isAdmin bool) ([]*DashboardCard, error) {
+	var cards []*DashboardCard
+	query := `
+		SELECT c.*, b.name AS board_name, b.slug AS board_slug
+		FROM card c
+		JOIN board b ON b.id = c.board_id
+		WHERE c.archived_at IS NULL
+	`
+	args := []any{}
+	if !isAdmin {
+		query += ` AND b.visibility IN ('open','public')`
+	}
+	query += ` ORDER BY c.created_at DESC, c.id DESC LIMIT ?`
+	args = append(args, limit)
+	if err := s.db.Select(&cards, query, args...); err != nil {
+		return nil, err
+	}
+	cardPtrs := make([]*Card, 0, len(cards))
+	for _, card := range cards {
+		cardPtrs = append(cardPtrs, &card.Card)
+	}
+	if err := s.attachLabels(cardPtrs); err != nil {
+		return nil, err
+	}
+	if err := s.attachAssignees(cardPtrs); err != nil {
 		return nil, err
 	}
 	return cards, nil
@@ -616,6 +678,128 @@ func (s *CardService) RecordSubscriptionMessage(cardID int64, message string) er
 	return err
 }
 
+func (s *CardService) AddChecklistItem(cardID int64, text string) (*Checklist, error) {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" {
+		return nil, errors.New("checklist item text is required")
+	}
+	var checklistID int64
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		id, err := ensureChecklistTx(tx, cardID)
+		if err != nil {
+			return err
+		}
+		checklistID = id
+		var maxPos int
+		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), -1) FROM checklist_item WHERE checklist_id=?`, checklistID)
+		if _, err := tx.Exec(
+			`INSERT INTO checklist_item (checklist_id, text, done, position) VALUES (?, ?, 0, ?)`,
+			checklistID, text, maxPos+1,
+		); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.checklistForCard(cardID)
+}
+
+func (s *CardService) SetChecklistItemDone(cardID, itemID int64, done bool) (*Checklist, error) {
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(`
+			UPDATE checklist_item
+			SET done=?
+			WHERE id=? AND checklist_id IN (SELECT id FROM checklist WHERE card_id=?)
+		`, done, itemID, cardID)
+		if err != nil {
+			return err
+		}
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.checklistForCard(cardID)
+}
+
+func (s *CardService) ReorderChecklistItems(cardID int64, ids []int64) (*Checklist, error) {
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		var checklistID int64
+		if err := tx.Get(&checklistID, `SELECT id FROM checklist WHERE card_id=?`, cardID); err != nil {
+			return err
+		}
+		for i, id := range ids {
+			if _, err := tx.Exec(`UPDATE checklist_item SET position=? WHERE id=? AND checklist_id=?`, i, id, checklistID); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.checklistForCard(cardID)
+}
+
+func (s *CardService) DeleteChecklistItem(cardID, itemID int64) (*Checklist, error) {
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(`
+			DELETE FROM checklist_item
+			WHERE id=? AND checklist_id IN (SELECT id FROM checklist WHERE card_id=?)
+		`, itemID, cardID)
+		if err != nil {
+			return err
+		}
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			return sql.ErrNoRows
+		}
+		var checklistID int64
+		if err := tx.Get(&checklistID, `SELECT id FROM checklist WHERE card_id=?`, cardID); err != nil {
+			return err
+		}
+		var ids []int64
+		if err := tx.Select(&ids, `SELECT id FROM checklist_item WHERE checklist_id=? ORDER BY position, id`, checklistID); err != nil {
+			return err
+		}
+		for i, id := range ids {
+			if _, err := tx.Exec(`UPDATE checklist_item SET position=? WHERE id=? AND checklist_id=?`, i, id, checklistID); err != nil {
+				return err
+			}
+		}
+		if len(ids) == 0 {
+			if _, err := tx.Exec(`DELETE FROM checklist WHERE id=?`, checklistID); err != nil {
+				return err
+			}
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.checklistForCard(cardID)
+}
+
+func (s *CardService) DeleteChecklist(cardID int64) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.Exec(`DELETE FROM checklist WHERE card_id=?`, cardID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+}
+
 func (s *CardService) MoveOverdueToLate(boardID int64, now time.Time) (int64, error) {
 	var moved int64
 	err := db.With(s.db, func(tx *sqlx.Tx) error {
@@ -638,6 +822,41 @@ func (s *CardService) MoveOverdueToLate(boardID int64, now time.Time) (int64, er
 		return nil
 	})
 	return moved, err
+}
+
+func ensureChecklistTx(tx *sqlx.Tx, cardID int64) (int64, error) {
+	var checklistID int64
+	err := tx.Get(&checklistID, `SELECT id FROM checklist WHERE card_id=?`, cardID)
+	if err == nil {
+		return checklistID, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	res, err := tx.Exec(`INSERT INTO checklist (card_id, title, position) VALUES (?, '', 0)`, cardID)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (s *CardService) checklistForCard(cardID int64) (*Checklist, error) {
+	var checklist Checklist
+	if err := s.db.Get(&checklist, `SELECT * FROM checklist WHERE card_id=?`, cardID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err := s.db.Select(&checklist.Items, `
+		SELECT id, checklist_id, text, done, position
+		FROM checklist_item
+		WHERE checklist_id=?
+		ORDER BY position, id
+	`, checklist.ID); err != nil {
+		return nil, err
+	}
+	return &checklist, nil
 }
 
 func orderedCardIDsTx(tx *sqlx.Tx, columnID, excludeID int64) ([]int64, error) {
@@ -730,6 +949,52 @@ func (s *CardService) attachLabelsByBoard(cards []*Card, boardID int64) error {
 		WHERE c.board_id=? AND c.archived_at IS NULL
 		ORDER BY l.title COLLATE NOCASE, l.id
 	`, boardID); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		card := cardsByID[row.CardID]
+		if card == nil {
+			continue
+		}
+		card.Labels = append(card.Labels, &Label{
+			ID:              row.ID,
+			Title:           row.Title,
+			NormalizedTitle: row.NormalizedTitle,
+			Description:     row.Description,
+			Color:           row.Color,
+			CreatedAt:       row.CreatedAt,
+			TextClass:       labelTextClass(row.Color),
+		})
+	}
+	return nil
+}
+
+func (s *CardService) attachLabels(cards []*Card) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	cardsByID := make(map[int64]*Card, len(cards))
+	for _, card := range cards {
+		card.Labels = nil
+		cardsByID[card.ID] = card
+	}
+	type cardLabelRow struct {
+		CardID          int64     `db:"card_id"`
+		ID              int64     `db:"id"`
+		Title           string    `db:"title"`
+		NormalizedTitle string    `db:"normalized_title"`
+		Description     string    `db:"description"`
+		Color           string    `db:"color"`
+		CreatedAt       time.Time `db:"created_at"`
+	}
+	var rows []cardLabelRow
+	if err := s.db.Select(&rows, `
+		SELECT cl.card_id, l.id, l.title, l.normalized_title, l.description, l.color, l.created_at
+		FROM card_label cl
+		JOIN label l ON l.id = cl.label_id
+		WHERE cl.card_id IN (SELECT id FROM card WHERE archived_at IS NULL)
+		ORDER BY l.title COLLATE NOCASE, l.id
+	`); err != nil {
 		return err
 	}
 	for _, row := range rows {

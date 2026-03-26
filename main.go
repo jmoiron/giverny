@@ -204,7 +204,7 @@ func main() {
 		a.Bind(r)
 	}
 
-	r.Get("/", index)
+	r.Get("/", home(kanbanApp))
 
 	for name, prefix := range cfg.FSS.URLs {
 		uploader := die(fss.CreateUploader(name))("creating uploader", "name", name)
@@ -234,15 +234,31 @@ func main() {
 	}
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	reg := mtr.RegistryFromContext(r.Context())
-	u := gauth.UserFromContext(r.Context())
-	err := reg.RenderWithBase(w, "base", "templates/index.html", mtr.Ctx{
-		"title": "",
-		"user":  u,
-	})
-	if err != nil {
-		app.Http500("rendering index", w, err)
+func home(kanbanApp *kanban.App) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reg := mtr.RegistryFromContext(r.Context())
+		u := gauth.UserFromContext(r.Context())
+		ctx := mtr.Ctx{
+			"title": "",
+			"user":  u,
+		}
+		if u != nil {
+			recentBoards, err := kanbanApp.RecentBoards(3, u)
+			if err != nil {
+				app.Http500("loading recent boards", w, err)
+				return
+			}
+			recentCards, err := kanbanApp.RecentCards(3, u)
+			if err != nil {
+				app.Http500("loading recent cards", w, err)
+				return
+			}
+			ctx["recentBoards"] = recentBoards
+			ctx["recentCards"] = recentCards
+		}
+		if err := reg.RenderWithBase(w, "base", "templates/index.html", ctx); err != nil {
+			app.Http500("rendering index", w, err)
+		}
 	}
 }
 

@@ -18,6 +18,7 @@ const (
 	EventCardDateUpdated         = "card.date.updated"
 	EventCardTitleModified       = "card.title.modified"
 	EventCardDescriptionModified = "card.description.modified"
+	EventCardChecklistUpdated    = "card.checklist.updated"
 	EventCardLabelAdded          = "card.label.added"
 	EventCardLabelRemoved        = "card.label.removed"
 	EventColumnCreated           = "column.created"
@@ -76,6 +77,23 @@ type CardDateUpdatedPayload struct {
 	DueDateValue      string `json:"due_date_value"`
 	UpdatedAtValue    string `json:"updated_at_value"`
 	UpdatedAtDisplay  string `json:"updated_at_display"`
+}
+
+type ChecklistItemPayload struct {
+	ID       int64  `json:"id"`
+	Text     string `json:"text"`
+	Done     bool   `json:"done"`
+	Position int    `json:"position"`
+}
+
+type CardChecklistUpdatedPayload struct {
+	CardID          int64                  `json:"card_id"`
+	ChecklistID     int64                  `json:"checklist_id"`
+	Exists          bool                   `json:"exists"`
+	Items           []ChecklistItemPayload `json:"items"`
+	CompletedCount  int                    `json:"completed_count"`
+	TotalCount      int                    `json:"total_count"`
+	PercentComplete int                    `json:"percent_complete"`
 }
 
 type CardReorderedPayload struct {

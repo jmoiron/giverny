@@ -21,6 +21,11 @@ $(function() {
         columnOriginalNextSibling: null,
         suppressCardClickUntil: 0
     };
+    var checklistDragState = {
+        itemId: null,
+        draggedEl: null,
+        placeholder: null
+    };
 
     function post(url, data) {
         var body = data instanceof FormData ? data : new URLSearchParams(data);
@@ -330,6 +335,9 @@ $(function() {
         if (typeof data.updated_at_value !== 'undefined') {
             $('#card-updated-at-display').text(formatTimestampDisplay(data.updated_at_value || ''));
         }
+        if (typeof data.checklist !== 'undefined') {
+            renderChecklist(data.checklist || { items: [], completed_count: 0, total_count: 0, percent_complete: 0 });
+        }
     }
 
     function applyCardDateUpdated(payload) {
@@ -341,6 +349,13 @@ $(function() {
         $('#card-due-date-input').val(payload.due_date_value || '');
         $('#card-due-date-display').text(formatCardDateDisplay(payload.due_date_value || ''));
         $('#card-updated-at-display').text(formatTimestampDisplay(payload.updated_at_value || ''));
+    }
+
+    function applyCardChecklistUpdated(payload) {
+        if (!payload || !payload.card_id) return;
+        var $form = getActiveCardForm(payload.card_id);
+        if (!$form.length) return;
+        renderChecklist(payload);
     }
 
     function findKnownLabelByTitle(title) {
@@ -368,6 +383,48 @@ $(function() {
         var $empty = $('#archived-empty-state');
         if (!$archivedCards.length || !$empty.length) return;
         $empty.toggleClass('is-hidden', $archivedCards.find('.kanban-card').length > 0);
+    }
+
+    function checklistPercent(completed, total) {
+        if (!total) return 0;
+        return Math.round((completed / total) * 100);
+    }
+
+    function createChecklistItem(item) {
+        var $item = $('<label class="checklist-item" draggable="true"></label>');
+        $item.attr('data-item-id', item.id);
+        $item.toggleClass('is-done', !!item.done);
+        $item.append($('<input type="checkbox" class="checklist-item-toggle">').prop('checked', !!item.done));
+        $item.append($('<span class="checklist-item-text"></span>').text(item.text || ''));
+        $item.append(
+            $('<a href="#" class="checklist-item-delete inline-remove-link" aria-label="delete checklist item"></a>')
+                .append('<i class="fa-solid fa-xmark"></i>')
+        );
+        return $item;
+    }
+
+    function renderChecklist(payload) {
+        var items = payload && payload.items ? payload.items : [];
+        var exists = !!(payload && payload.exists);
+        var $section = $('#card-checklist-section');
+        var $items = $('#card-checklist-items');
+        if (!$items.length || !$section.length) return;
+        $section.toggleClass('is-empty', !exists);
+        $items.empty();
+        items.forEach(function(item) {
+            $items.append(createChecklistItem(item));
+        });
+        $items.toggleClass('is-empty', items.length === 0);
+        $('#checklist-progress-text').text((payload && payload.completed_count || 0) + '/' + (payload && payload.total_count || 0) + ' ' + (payload && payload.percent_complete || 0) + '%');
+        $('#checklist-progress-fill').css('width', String(payload && payload.percent_complete || 0) + '%');
+        updateChecklistCompletedVisibility();
+    }
+
+    function updateChecklistCompletedVisibility() {
+        var $section = $('#card-checklist-section');
+        if (!$section.length) return;
+        var hidden = $section.hasClass('hide-completed');
+        $('#checklist-toggle-completed-btn').text(hidden ? 'show completed' : 'hide completed');
     }
 
     function createLabelPill(label) {
@@ -421,6 +478,12 @@ $(function() {
         var $container = $('.col-cards[data-column-id="' + columnId + '"]').first();
         if (!$card.length || !$container.length) return;
         $container.append($card);
+    }
+
+    function checklistItemIDs() {
+        return $('#card-checklist-items .checklist-item').map(function() {
+            return Number($(this).data('item-id'));
+        }).get();
     }
 
     function reorderColumns(columnIDs) {
@@ -519,6 +582,13 @@ $(function() {
         if (targetColumnId !== dragState.cardFromColumnId) return false;
         var currentIndex = childIndex(dragState.cardDraggedEl, '.kanban-card');
         var targetIndex = beforeEl ? childIndex(beforeEl, '.kanban-card') : colCards.querySelectorAll('.kanban-card').length;
+        return targetIndex === currentIndex || targetIndex === currentIndex + 1;
+    }
+
+    function isNoOpChecklistPlacement(beforeEl, checklistItemsEl) {
+        if (!checklistDragState.draggedEl) return false;
+        var currentIndex = childIndex(checklistDragState.draggedEl, '.checklist-item');
+        var targetIndex = beforeEl ? childIndex(beforeEl, '.checklist-item') : checklistItemsEl.querySelectorAll('.checklist-item').length;
         return targetIndex === currentIndex || targetIndex === currentIndex + 1;
     }
 
@@ -760,7 +830,7 @@ $(function() {
         updateArchivedColumnState();
         var $form = getActiveCardForm(payload.card_id);
         if ($form.length) {
-            $cardModal.removeClass('active');
+            closeCardModal(hashCardID() === Number(payload.card_id));
         }
     }
 
@@ -783,6 +853,9 @@ $(function() {
             break;
         case 'card.description.modified':
             applyCardDescriptionModified(evt.payload);
+            break;
+        case 'card.checklist.updated':
+            applyCardChecklistUpdated(evt.payload);
             break;
         case 'card.color.changed':
             applyCardColorChanged(evt.payload);
@@ -1230,27 +1303,18 @@ $(function() {
         e.stopPropagation();
     });
 
-    $(document).on('click', '[data-submit]', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var formId = $(this).data('submit');
-        var message = $(this).data('confirm');
-        if (message && !window.confirm(message)) return;
-        var form = document.getElementById(formId);
-        if (form) form.submit();
-    });
-
     $(document).on('click', '#archived-delete-all-btn', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        if (!window.confirm('Delete all archived cards permanently?')) return;
-        post('/boards/' + board + '/cards/archived/delete', {})
-            .then(function(r) { return r.json(); })
-            .then(function() {
-                $('#archived-cards .kanban-card').remove();
-                updateArchivedColumnState();
-                $('.col-actions').removeClass('open');
-            });
+        window.showConfirmModal('Delete all archived cards permanently?', function() {
+            post('/boards/' + board + '/cards/archived/delete', {})
+                .then(function(r) { return r.json(); })
+                .then(function() {
+                    $('#archived-cards .kanban-card').remove();
+                    updateArchivedColumnState();
+                    $('.col-actions').removeClass('open');
+                });
+        });
     });
 
     $(document).on('click', '.col-collapse-btn', function(e) {
@@ -1324,13 +1388,32 @@ $(function() {
 
     // --- Card detail modal ---
     var $cardModal = $('#card-modal');
+    var cardModalRequestID = 0;
 
-    $(document).on('click', '.kanban-card', function() {
-        if (shouldSuppressCardClick()) return;
-        var cardId = $(this).data('id');
+    function cardHash(cardId) {
+        return '#card-' + Number(cardId);
+    }
+
+    function hashCardID(hash) {
+        var match = String(hash || window.location.hash || '').match(/^#card-(\d+)$/);
+        return match ? Number(match[1]) : 0;
+    }
+
+    function openCardModal(cardId, syncHash) {
+        cardId = Number(cardId || 0);
+        if (!cardId) return;
+        if (syncHash !== false) {
+            var nextHash = cardHash(cardId);
+            if (window.location.hash !== nextHash) {
+                window.location.hash = nextHash;
+                return;
+            }
+        }
+        var requestID = ++cardModalRequestID;
         fetch('/boards/' + board + '/cards/' + cardId)
             .then(function(r) { return r.text(); })
             .then(function(html) {
+                if (requestID !== cardModalRequestID) return;
                 $cardModal.find('.card-modal-inner').html(html);
                 var $form = $cardModal.find('#card-detail-form');
                 updateCardAccent($cardModal, $form.closest('.card-detail').data('card-color') || '');
@@ -1343,11 +1426,49 @@ $(function() {
                     $form.find('#card-description-rendered').html()
                 );
                 hideCardEditWarning($form);
+                updateChecklistCompletedVisibility();
                 $cardModal.addClass('active');
             });
+    }
+
+    function closeCardModal(syncHash) {
+        cardModalRequestID++;
+        $cardModal.removeClass('active');
+        if (syncHash !== false && hashCardID()) {
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+    }
+
+    function syncCardModalToHash() {
+        var cardId = hashCardID();
+        if (cardId) {
+            openCardModal(cardId, false);
+            return;
+        }
+        closeCardModal(false);
+    }
+
+    window.addEventListener('hashchange', syncCardModalToHash);
+
+    $(document).on('click', '.kanban-card', function() {
+        if (shouldSuppressCardClick()) return;
+        openCardModal($(this).data('id'), true);
     });
 
+    syncCardModalToHash();
+
     document.addEventListener('dragstart', function(ev) {
+        var checklistItem = ev.target.closest('.checklist-item');
+        if (checklistItem) {
+            checklistDragState.itemId = Number($(checklistItem).data('item-id'));
+            checklistDragState.draggedEl = checklistItem;
+            checklistDragState.placeholder = null;
+            setDragGhost(ev, checklistItem);
+            startDragMode('card');
+            $(checklistItem).addClass('dragging-source');
+            return;
+        }
+
         var header = ev.target.closest('.col-header');
         if (header) {
             if (ev.target.closest('.col-actions')) {
@@ -1391,6 +1512,28 @@ $(function() {
     }, true);
 
     document.addEventListener('dragover', function(ev) {
+        var checklistItemsEl = ev.target.closest('#card-checklist-items');
+        if (checklistItemsEl && checklistDragState.itemId) {
+            ev.preventDefault();
+            var checklistItems = checklistItemsEl.querySelectorAll('.checklist-item:not(.dragging-source)');
+            var beforeChecklistItem = findInsertBeforeByAxis(checklistItems, ev.clientY, 'y');
+            if (isNoOpChecklistPlacement(beforeChecklistItem, checklistItemsEl)) {
+                if (checklistDragState.placeholder && checklistDragState.placeholder.parentNode) {
+                    checklistDragState.placeholder.parentNode.removeChild(checklistDragState.placeholder);
+                }
+                return;
+            }
+            if (!checklistDragState.placeholder) {
+                checklistDragState.placeholder = createDragPlaceholder($(checklistDragState.draggedEl), 'card-drop-placeholder checklist-drop-placeholder')[0];
+            }
+            if (beforeChecklistItem) {
+                beforeChecklistItem.parentNode.insertBefore(checklistDragState.placeholder, beforeChecklistItem);
+            } else {
+                checklistItemsEl.appendChild(checklistDragState.placeholder);
+            }
+            return;
+        }
+
         var boardColumns = ev.target.closest('.board-columns');
         if (boardColumns && dragState.columnId) {
             ev.preventDefault();
@@ -1445,6 +1588,25 @@ $(function() {
     }, true);
 
     document.addEventListener('drop', function(ev) {
+        var checklistItemsEl = ev.target.closest('#card-checklist-items');
+        if (checklistItemsEl && checklistDragState.itemId && checklistDragState.draggedEl) {
+            ev.preventDefault();
+            if (checklistDragState.placeholder && checklistDragState.placeholder.parentNode) {
+                checklistDragState.placeholder.parentNode.insertBefore(checklistDragState.draggedEl, checklistDragState.placeholder);
+            }
+            var itemIDs = checklistItemIDs();
+            if (itemIDs.length) {
+                postJSON('/boards/' + board + '/cards/' + $('#card-detail-form').data('id') + '/checklist/reorder', itemIDs);
+            }
+            $(checklistDragState.draggedEl).removeClass('dragging-source');
+            if (checklistDragState.placeholder) $(checklistDragState.placeholder).remove();
+            checklistDragState.itemId = null;
+            checklistDragState.draggedEl = null;
+            checklistDragState.placeholder = null;
+            stopDragMode();
+            return;
+        }
+
         var boardColumns = ev.target.closest('.board-columns');
         if (boardColumns && dragState.columnId && dragState.columnDraggedEl) {
             ev.preventDefault();
@@ -1498,6 +1660,15 @@ $(function() {
     }, true);
 
     document.addEventListener('dragend', function(ev) {
+        if (ev.target.closest('.checklist-item')) {
+            $(ev.target).removeClass('dragging-source');
+            if (checklistDragState.placeholder) $(checklistDragState.placeholder).remove();
+            checklistDragState.itemId = null;
+            checklistDragState.draggedEl = null;
+            checklistDragState.placeholder = null;
+            stopDragMode();
+            return;
+        }
         if (ev.target.closest('.col-header')) {
             if (dragState.columnDraggedEl && dragState.columnPlaceholder && dragState.columnPlaceholder.parentNode) {
                 dragState.columnPlaceholder.parentNode.insertBefore(dragState.columnDraggedEl, dragState.columnPlaceholder);
@@ -1522,11 +1693,11 @@ $(function() {
     // Close card modal
     $(document).on('click', '#card-modal-close', function(e) {
         e.preventDefault();
-        $cardModal.removeClass('active');
+        closeCardModal(true);
     });
 
     $cardModal.on('click', function(e) {
-        if (e.target === this) $cardModal.removeClass('active');
+        if (e.target === this) closeCardModal(true);
     });
 
     $(document).on('dblclick', '#card-description-rendered', function() {
@@ -1604,6 +1775,16 @@ $(function() {
             renderAssigneeSuggestions($('#card-assignee-input').val());
             $('#card-assignee-input').trigger('focus');
         }
+    });
+
+    $(document).on('click', '#card-checklist-btn', function() {
+        var input = document.getElementById('checklist-new-item-input');
+        var section = document.getElementById('card-checklist-section');
+        if (section) {
+            section.classList.remove('is-empty');
+            section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        if (input) input.focus();
     });
 
     $(document).on('click', function(e) {
@@ -1747,6 +1928,64 @@ $(function() {
             });
     });
 
+    $(document).on('keydown', '#checklist-new-item-input', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var text = $(this).val().trim();
+        var cardId = $(this).closest('#card-detail-form').data('id');
+        var $form = $(this).closest('#card-detail-form');
+        if (!text) return;
+        post('/boards/' + board + '/cards/' + cardId + '/checklist/items', { text: text })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+                $('#checklist-new-item-input').val('').focus();
+            });
+    });
+
+    $(document).on('change', '.checklist-item-toggle', function() {
+        var $item = $(this).closest('.checklist-item');
+        var cardId = $(this).closest('#card-detail-form').data('id');
+        var $form = $(this).closest('#card-detail-form');
+        post('/boards/' + board + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/done', {
+            done: this.checked ? '1' : '0'
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('click', '.checklist-item-delete', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $item = $(this).closest('.checklist-item');
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('click', '#checklist-toggle-completed-btn', function() {
+        $('#card-checklist-section').toggleClass('hide-completed');
+        updateChecklistCompletedVisibility();
+    });
+
+    $(document).on('click', '#checklist-delete-btn', function() {
+        var cardId = $(this).closest('#card-detail-form').data('id');
+        var $form = $(this).closest('#card-detail-form');
+        window.showConfirmModal('Delete this checklist?', function() {
+            post('/boards/' + board + '/cards/' + cardId + '/checklist/delete', {})
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    applyCardMetaResponse($form, data);
+                });
+        });
+    });
+
     // Save card
     $(document).on('submit', '#card-detail-form', function(e) {
         e.preventDefault();
@@ -1792,7 +2031,7 @@ $(function() {
                 }
                 $card.remove();
                 updateArchivedColumnState();
-                $cardModal.removeClass('active');
+                closeCardModal(hashCardID() === Number(cardId));
             });
     });
 
@@ -1806,19 +2045,20 @@ $(function() {
                 }
                 $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
                 updateArchivedColumnState();
-                $cardModal.removeClass('active');
+                closeCardModal(hashCardID() === Number(cardId));
             });
     });
 
     $(document).on('click', '#card-delete-btn', function() {
         var cardId = $(this).data('card-id');
-        if (!window.confirm('Delete this archived card permanently?')) return;
-        post('/boards/' + board + '/cards/' + cardId + '/delete', {})
-            .then(function(r) { return r.json(); })
-            .then(function() {
-                $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
-                updateArchivedColumnState();
-                $cardModal.removeClass('active');
-            });
+        window.showConfirmModal('Delete this archived card permanently?', function() {
+            post('/boards/' + board + '/cards/' + cardId + '/delete', {})
+                .then(function(r) { return r.json(); })
+                .then(function() {
+                    $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
+                    updateArchivedColumnState();
+                    closeCardModal(hashCardID() === Number(cardId));
+                });
+        });
     });
 });

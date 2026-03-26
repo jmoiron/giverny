@@ -749,7 +749,9 @@ body.drag-column .board-columns * {
         }
 
         &.is-active.subscribed-btn {
-            color: var(--accent);
+            i {
+                color: #FBB829;
+            }
         }
 
         &.danger-btn {
@@ -767,6 +769,16 @@ body.drag-column .board-columns * {
             &:hover {
                 background: var(--red);
                 filter: brightness(1.05);
+            }
+        }
+    }
+
+    html.dark & {
+        .quick-control-btn {
+            &.is-active.subscribed-btn {
+                i {
+                    color: #FFE500;
+                }
             }
         }
     }
@@ -1008,15 +1020,8 @@ body.drag-column .board-columns * {
     }
 
     .card-assignee-remove {
-        color: var(--muted);
-        text-decoration: none;
-        line-height: 1;
-        font-size: 0.72rem;
         padding-left: 0.05rem;
-
-        &:hover {
-            color: var(--text);
-        }
+        font-size: 0.72rem;
     }
 
     .card-edit-warning {
@@ -1125,6 +1130,158 @@ body.drag-column .board-columns * {
         .label-pill {
             pointer-events: none;
         }
+    }
+
+    .checklist-widget {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .checklist-progress-copy {
+        flex: 0 0 auto;
+        font-size: 0.82rem;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .checklist-progress-bar {
+        flex: 1 1 auto;
+        height: 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface) 65%, var(--border) 35%);
+        overflow: hidden;
+    }
+
+    .checklist-progress-fill {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--sky), var(--green));
+    }
+
+    &.has-card-color {
+        .checklist-progress-fill {
+            background: linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--card-color) 58%, #ffffff 42%),
+                color-mix(in srgb, var(--card-color) 82%, #000000 18%)
+            );
+        }
+    }
+
+    .checklist-items {
+        display: flex;
+        flex-direction: column;
+        gap: 0.225rem;
+        margin-bottom: 0.75rem;
+
+        &.is-empty { display: none; }
+    }
+
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.275rem 0.65rem;
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+        user-select: none;
+
+        &:hover {
+            background: color-mix(in srgb, var(--surface) 72%, var(--hover-bg) 28%);
+        }
+
+        &.dragging-source {
+            opacity: 0.18;
+            background: color-mix(in srgb, var(--surface) 72%, var(--hover-bg) 28%);
+        }
+
+        &.is-done .checklist-item-text {
+            color: var(--muted);
+            text-decoration: line-through;
+        }
+    }
+
+    .checklist-section {
+        &.is-empty {
+            display: none;
+        }
+    }
+
+    .hide-completed .checklist-item.is-done {
+        display: none;
+    }
+
+    .checklist-item-toggle {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+    }
+
+    .checklist-item-text {
+        flex: 1 1 auto;
+        font-size: 0.92rem;
+        color: var(--text);
+    }
+
+    .inline-remove-link {
+        flex: 0 0 auto;
+        color: var(--muted);
+        text-decoration: none;
+        line-height: 1;
+        transition: opacity 0.12s ease, color 0.12s ease;
+
+        &:hover {
+            color: var(--red);
+        }
+    }
+
+    .checklist-item-delete {
+        opacity: 0;
+        pointer-events: none;
+        font-size: 0.8em;
+    }
+
+    .checklist-item:hover .checklist-item-delete,
+    .checklist-item:focus-within .checklist-item-delete {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    #checklist-new-item-input {
+        width: 100%;
+        margin-bottom: 0.7rem;
+    }
+
+    .checklist-actions-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.7rem;
+    }
+
+    .checklist-toggle-completed-btn,
+    .checklist-delete-btn {
+        width: auto;
+        padding: 0.45rem 0.8rem;
+        justify-content: center;
+    }
+
+    .checklist-toggle-completed-btn {
+        color: var(--text);
+    }
+
+    .checklist-delete-btn {
+        color: var(--red);
+    }
+
+    .checklist-drop-placeholder {
+        min-height: 30px;
     }
 
     .card-actions {

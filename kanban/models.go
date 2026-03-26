@@ -52,8 +52,9 @@ type Card struct {
 	CreatedBy       int64      `db:"created_by"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
-	Labels          []*Label   `db:"-"`
+	Labels          []*Label      `db:"-"`
 	Assignees       []*gauth.User `db:"-"`
+	Checklist       *Checklist    `db:"-"`
 }
 
 type CardSubscription struct {
@@ -91,6 +92,7 @@ type Checklist struct {
 	CardID   int64  `db:"card_id"`
 	Title    string `db:"title"`
 	Position int    `db:"position"`
+	Items    []*ChecklistItem `db:"-"`
 }
 
 type ChecklistItem struct {
@@ -340,6 +342,10 @@ var ChecklistMigrations = monarch.Set{
 				position INTEGER NOT NULL DEFAULT 0
 			);`,
 			Down: `DROP TABLE checklist_item;`,
+		},
+		{
+			Up:   `CREATE UNIQUE INDEX IF NOT EXISTS checklist_card_id_unique ON checklist(card_id);`,
+			Down: `DROP INDEX checklist_card_id_unique;`,
 		},
 	},
 }

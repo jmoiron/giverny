@@ -52,6 +52,14 @@ func NewApp(dbh db.DB) *App {
 
 func (a *App) Name() string { return "kanban" }
 
+func (a *App) RecentBoards(limit int, user *gauth.User) ([]*Board, error) {
+	return a.boards.RecentByCardActivity(limit, user != nil && user.IsAdmin())
+}
+
+func (a *App) RecentCards(limit int, user *gauth.User) ([]*DashboardCard, error) {
+	return a.cards.Recent(limit, user != nil && user.IsAdmin())
+}
+
 func (a *App) Migrate() error {
 	m, err := monarch.NewManager(a.db)
 	if err != nil {
@@ -134,6 +142,11 @@ func (a *App) Bind(r chi.Router) {
 				r.Post("/assignees/{userID}/delete", a.handleRemoveCardAssignee)
 				r.Post("/start-date", a.handleSetCardStartDate)
 				r.Post("/due-date", a.handleSetCardDueDate)
+				r.Post("/checklist/items", a.handleAddChecklistItem)
+				r.Post("/checklist/items/{itemID}/done", a.handleSetChecklistItemDone)
+				r.Post("/checklist/items/{itemID}/delete", a.handleDeleteChecklistItem)
+				r.Post("/checklist/reorder", a.handleReorderChecklistItems)
+				r.Post("/checklist/delete", a.handleDeleteChecklist)
 				r.Post("/labels", a.handleAddCardLabel)
 				r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
 				r.Post("/move", a.handleMoveCard)
@@ -299,6 +312,7 @@ func (a *App) cardResponse(r *http.Request, card *Card) map[string]any {
 		"due_date_value":     dueDateValue,
 		"updated_at_value":   card.UpdatedAt.Format(time.RFC3339),
 		"updated_at_display": formatTimestampForUser(r.Context(), card.UpdatedAt),
+		"checklist":          a.cardChecklistPayload(card.ID, card.Checklist),
 		"html":               html,
 	}
 }
@@ -318,6 +332,37 @@ func (a *App) cardDateUpdatedPayload(card *Card) CardDateUpdatedPayload {
 		UpdatedAtValue:   card.UpdatedAt.Format(time.RFC3339),
 		UpdatedAtDisplay: "",
 	}
+}
+
+func (a *App) cardChecklistPayload(cardID int64, checklist *Checklist) CardChecklistUpdatedPayload {
+	payload := CardChecklistUpdatedPayload{
+		CardID: cardID,
+		Exists: checklist != nil,
+	}
+	if checklist == nil {
+		return payload
+	}
+	payload.ChecklistID = checklist.ID
+	payload.Items = make([]ChecklistItemPayload, 0, len(checklist.Items))
+	for _, item := range checklist.Items {
+		if item == nil {
+			continue
+		}
+		payload.Items = append(payload.Items, ChecklistItemPayload{
+			ID:       item.ID,
+			Text:     item.Text,
+			Done:     item.Done,
+			Position: item.Position,
+		})
+		if item.Done {
+			payload.CompletedCount++
+		}
+	}
+	payload.TotalCount = len(payload.Items)
+	if payload.TotalCount > 0 {
+		payload.PercentComplete = int(float64(payload.CompletedCount) / float64(payload.TotalCount) * 100)
+	}
+	return payload
 }
 
 func canViewBoard(board *Board, user *gauth.User) bool {
@@ -894,6 +939,7 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		"currentUser":         user,
 		"createdAtDisplay":    formatTimestampForUser(r.Context(), card.CreatedAt),
 		"updatedAtDisplay":    formatTimestampForUser(r.Context(), card.UpdatedAt),
+		"checklist":           a.cardChecklistPayload(card.ID, card.Checklist),
 	}); err != nil {
 		slog.Error("rendering card", "err", err)
 	}
@@ -1179,6 +1225,136 @@ func (a *App) handleSetCardDueDate(w http.ResponseWriter, r *http.Request) {
 	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card due date")
 	a.publishBoardEvent(slug, EventCardDateUpdated, a.cardDateUpdatedPayload(card))
 	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleAddChecklistItem(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	checklist, err := a.cards.AddChecklistItem(cardID, r.FormValue("text"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "add checklist item failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err == nil {
+		_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added a checklist item")
+		a.publishBoardEvent(slug, EventCardChecklistUpdated, a.cardChecklistPayload(cardID, checklist))
+		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+		return
+	}
+	apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+}
+
+func (a *App) handleSetChecklistItemDone(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	itemID, err := parseID(chi.URLParam(r, "itemID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid checklist item id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	checklist, err := a.cards.SetChecklistItemDone(cardID, itemID, r.FormValue("done") == "1")
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "checklist update failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err == nil {
+		_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" updated the checklist")
+		a.publishBoardEvent(slug, EventCardChecklistUpdated, a.cardChecklistPayload(cardID, checklist))
+		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+		return
+	}
+	apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+}
+
+func (a *App) handleDeleteChecklistItem(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	itemID, err := parseID(chi.URLParam(r, "itemID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid checklist item id")
+		return
+	}
+	checklist, err := a.cards.DeleteChecklistItem(cardID, itemID)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "delete failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err == nil {
+		_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" deleted a checklist item")
+		a.publishBoardEvent(slug, EventCardChecklistUpdated, a.cardChecklistPayload(cardID, checklist))
+		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+		return
+	}
+	apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+}
+
+func (a *App) handleReorderChecklistItems(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	var ids []int64
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	checklist, err := a.cards.ReorderChecklistItems(cardID, ids)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "reorder failed")
+		return
+	}
+	a.publishBoardEvent(slug, EventCardChecklistUpdated, a.cardChecklistPayload(cardID, checklist))
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) handleDeleteChecklist(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := a.cards.DeleteChecklist(cardID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" deleted the checklist")
+	a.publishBoardEvent(slug, EventCardChecklistUpdated, a.cardChecklistPayload(cardID, nil))
+	card, err := a.cards.Get(cardID)
+	if err == nil {
+		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+		return
+	}
+	apiErr(w, http.StatusInternalServerError, "loading updated card failed")
 }
 
 func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {
