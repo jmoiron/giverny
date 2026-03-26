@@ -15,7 +15,7 @@ It's kanban.
 * Cards and columns can be moved around.
 * You can assign users and due dates to cards.
 * You can attach files to cards.
-* You can add a checklist to cards.
+* You can add checklists and labels to cards.
 
 All modifications go through a websocket so all users get live updates from every other user.
 
@@ -51,3 +51,11 @@ Several reasons, none of them particularly interesting:
 * I wanted something that was easy to back up
 
 I don't imagine it will ever be very good or featureful as kanban software, but it will be mine!
+
+### preview
+
+Light Mode:
+![](/media/giverny-light.png)
+
+Dark mode:
+![](/media/giverny-dark.png)
