@@ -5,10 +5,10 @@ After=network.target
 [Service]
 Type=exec
 WorkingDirectory=/opt/giverny
-ExecStart=/opt/giverny --config /opt/giverny/cfg.json
+ExecStart=/opt/giverny/giverny -c /opt/giverny/cfg.json
 Restart=on-failure
 RestartSec=5s
-#User=
+#User=giverny
 
 # Keep writable state under the working directory. The sample config should
 # point SQLite and filesystem-backed uploads under /opt/giverny.
