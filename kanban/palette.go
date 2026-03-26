@@ -1,8 +1,10 @@
 package kanban
 
 import (
+	"hash/fnv"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var rawLabelPalette = []string{
@@ -19,16 +21,22 @@ func nextLabelColor(used []string) string {
 	if len(labelPalette) == 0 {
 		return "#888888"
 	}
-	usedSet := make(map[string]struct{}, len(used))
+	n := len(labelPalette)
+	start := paletteStartIndex(used, n)
+	return labelPalette[start]
+}
+
+func paletteStartIndex(used []string, size int) int {
+	if size <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
 	for _, color := range used {
-		usedSet[strings.ToUpper(strings.TrimSpace(color))] = struct{}{}
+		_, _ = h.Write([]byte(strings.ToUpper(strings.TrimSpace(color))))
+		_, _ = h.Write([]byte{0})
 	}
-	for _, color := range labelPalette {
-		if _, ok := usedSet[strings.ToUpper(color)]; !ok {
-			return color
-		}
-	}
-	return labelPalette[len(used)%len(labelPalette)]
+	_, _ = h.Write([]byte(strconv.FormatInt(time.Now().UnixNano(), 10)))
+	return int(h.Sum32() % uint32(size))
 }
 
 func dedupePalette(colors []string, threshold float64) []string {

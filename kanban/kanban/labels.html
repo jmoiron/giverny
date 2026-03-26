@@ -21,7 +21,19 @@
                         <input type="text" name="description" value="{{.Description}}" placeholder="optional description">
                 </td>
                 <td>
-                        <input type="color" name="color" value="{{.Color}}">
+                        <div class="label-color-picker" data-current-color="{{.Color}}">
+                            <input type="hidden" name="color" value="{{.Color}}">
+                            <button type="button" class="label-color-trigger color-swatch-btn" style="--swatch-color: {{.Color}}" title="select color"></button>
+                            <div class="label-color-panel quick-control-panel color-picker-panel" style="display:none">
+                                <div class="color-swatch-grid">
+                                    {{range $.paletteColors}}
+                                    <button type="button" class="label-color-swatch color-swatch-btn" data-color="{{.}}" style="--swatch-color: {{.}}" title="{{.}}"></button>
+                                    {{end}}
+                                    <button type="button" class="label-color-swatch color-swatch-btn more-swatch-btn" title="custom color">...</button>
+                                </div>
+                                <input type="color" class="label-color-custom" value="{{.Color}}" style="position:absolute; opacity:0; width:0; height:0; pointer-events:none">
+                            </div>
+                        </div>
                 </td>
                 <td>
                         <span class="label-pill {{.TextClass}}" style="--label-color: {{.Color}}" title="{{.Description}}">{{.Title}}</span>

@@ -1002,9 +1002,10 @@ func (a *App) renderLabelListPage(w http.ResponseWriter, r *http.Request) {
 	}
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/labels.html", mtr.Ctx{
-		"title":  "labels",
-		"labels": labels,
-		"user":   gauth.UserFromContext(r.Context()),
+		"title":         "labels",
+		"labels":        labels,
+		"paletteColors": labelPalette,
+		"user":          gauth.UserFromContext(r.Context()),
 	}); err != nil {
 		app.Http500("rendering labels", w, err)
 	}
@@ -1911,6 +1912,11 @@ func (a *App) handleAddCardLabel(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
+	cardBefore, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading card failed")
+		return
+	}
 	labelID, err := parseID(r.FormValue("label_id"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, "invalid label id")
@@ -1925,6 +1931,11 @@ func (a *App) handleAddCardLabel(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusInternalServerError, "loading label failed")
 		return
 	}
+	cardAfter, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading card failed")
+		return
+	}
 	a.publishBoardEvent(board, EventCardLabelAdded, CardLabelAddedPayload{
 		CardID: cardID,
 		Label: EventLabelPayload{
@@ -1935,6 +1946,12 @@ func (a *App) handleAddCardLabel(w http.ResponseWriter, r *http.Request) {
 			Description: label.Description,
 		},
 	})
+	if cardBefore.Color != cardAfter.Color {
+		a.publishBoardEvent(board, EventCardColorChanged, CardColorChangedPayload{
+			CardID: cardID,
+			Color:  cardAfter.Color,
+		})
+	}
 	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added label "+label.Title)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

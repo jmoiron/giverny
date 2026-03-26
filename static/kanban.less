@@ -930,37 +930,6 @@ body.drag-column .board-columns * {
         box-shadow: 3px 4px 0 rgba(0,0,0,0.18);
     }
 
-    .color-swatch-grid {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-        gap: 0.4rem;
-    }
-
-    .color-swatch-btn {
-        --swatch-color: transparent;
-        width: 100%;
-        height: 1.6rem;
-        min-width: 0;
-        padding: 0;
-        line-height: 1;
-        border-radius: 5px;
-        border: 2px solid color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
-        background: var(--swatch-color);
-        color: var(--text);
-        cursor: pointer;
-        font-size: 0.82rem;
-
-        &:hover {
-            border-color: var(--text);
-            background: var(--swatch-color);
-        }
-
-        &.clear-swatch-btn,
-        &.more-swatch-btn {
-            background: var(--hover-bg);
-        }
-    }
-
     .assign-picker-panel input[type=text],
     .date-picker-panel input[type=date] {
         width: 100%;

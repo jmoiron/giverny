@@ -28,6 +28,55 @@ main {
 a { color: var(--link); }
 a:hover { color: var(--accent); }
 
+.color-picker-panel {
+    background: color-mix(in srgb, var(--surface) 82%, var(--hover-bg) 18%);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.55rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    box-shadow: 3px 4px 0 rgba(0,0,0,0.18);
+
+    .color-swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+
+    .color-swatch-btn {
+        --swatch-color: transparent;
+        width: 100%;
+        height: 1.6rem;
+        min-width: 0;
+        padding: 0;
+        margin: 0;
+        line-height: 1;
+        border-radius: 5px;
+        border: 2px solid color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
+        background: var(--swatch-color);
+        color: var(--text);
+        cursor: pointer;
+        box-shadow: none;
+        font-size: 0.82rem;
+
+        &:hover {
+            border-color: var(--text);
+            background: var(--swatch-color);
+        }
+
+        &.clear-swatch-btn,
+        &.more-swatch-btn {
+            background: var(--hover-bg);
+        }
+    }
+
+    .more-swatch-btn {
+        color: var(--text);
+        font-size: 0.95rem;
+    }
+}
+
 header {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border);

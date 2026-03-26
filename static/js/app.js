@@ -111,6 +111,42 @@ $(function() {
         $chip.text(title);
     });
 
+    $(document).on('click', '.label-color-trigger', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $picker = $(this).closest('.label-color-picker');
+        $('.label-color-panel').not($picker.find('.label-color-panel')).hide();
+        $picker.find('.label-color-panel').toggle();
+    });
+
+    $(document).on('click', '.label-color-swatch[data-color]', function(e) {
+        e.preventDefault();
+        var $picker = $(this).closest('.label-color-picker');
+        var color = $(this).attr('data-color') || '#888888';
+        $picker.find('input[name=color]').val(color).trigger('input');
+        $picker.find('.label-color-trigger').attr('style', '--swatch-color: ' + color);
+        $picker.find('.label-color-custom').val(color);
+        $picker.find('.label-color-panel').hide();
+    });
+
+    $(document).on('click', '.label-color-swatch.more-swatch-btn', function(e) {
+        e.preventDefault();
+        $(this).closest('.label-color-picker').find('.label-color-custom').trigger('click');
+    });
+
+    $(document).on('input change', '.label-color-custom', function() {
+        var $picker = $(this).closest('.label-color-picker');
+        var color = $(this).val() || '#888888';
+        $picker.find('input[name=color]').val(color).trigger('input');
+        $picker.find('.label-color-trigger').attr('style', '--swatch-color: ' + color);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.label-color-picker').length) {
+            $('.label-color-panel').hide();
+        }
+    });
+
     $('#theme-toggle').on('click', function() {
         var cur = localStorage.getItem('theme') || 'light';
         var next = cur === 'dark' ? 'light' : 'dark';

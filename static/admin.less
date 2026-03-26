@@ -154,6 +154,11 @@
 }
 
 .admin-labels {
+    .admin-table td:nth-child(3),
+    .admin-table th:nth-child(3) {
+        text-align: center;
+    }
+
     .label-form {
         display: contents;
     }
@@ -161,6 +166,49 @@
     .label-create-form {
         input[type=text] { width: 220px; }
     }
+
+    .label-color-picker {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .label-color-trigger {
+        display: inline-flex;
+        flex: 0 0 auto;
+        width: 1.6rem;
+        min-width: 1.6rem;
+        max-width: 1.6rem;
+        height: 1.6rem;
+        padding: 0;
+        border: 1px solid var(--hover-bg);
+        border-radius: 4px;
+        background: var(--swatch-color);
+        box-shadow: none;
+        cursor: pointer;
+
+        &:hover {
+            border-color: var(--text);
+            background: var(--swatch-color);
+        }
+    }
+
+    .label-color-panel {
+        position: absolute;
+        top: calc(100% + 0.35rem);
+        left: 0;
+        width: calc(220px - 1rem);
+        z-index: 30;
+    }
+
+    .label-color-trigger.color-swatch-btn {
+        width: 1.6rem;
+        min-width: 1.6rem;
+        max-width: 1.6rem;
+        height: 1.6rem;
+        flex: 0 0 1.6rem;
+    }
+
 }
 
 .user-settings {

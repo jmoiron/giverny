@@ -511,6 +511,26 @@ func (s *CardService) AddLabel(cardID, labelID int64) error {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO card_label (card_id, label_id) VALUES (?, ?)`, cardID, labelID); err != nil {
 			return err
 		}
+		var labelCount int
+		if err := tx.Get(&labelCount, `SELECT COUNT(*) FROM card_label WHERE card_id=?`, cardID); err != nil {
+			return err
+		}
+		if labelCount == 1 {
+			var cardColor string
+			if err := tx.Get(&cardColor, `SELECT color FROM card WHERE id=?`, cardID); err != nil {
+				return err
+			}
+			if strings.TrimSpace(cardColor) == "" {
+				var labelColor string
+				if err := tx.Get(&labelColor, `SELECT color FROM label WHERE id=?`, labelID); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(`UPDATE card SET color=?, updated_at=datetime('now') WHERE id=?`, sanitizeLabelColor(labelColor), cardID); err != nil {
+					return err
+				}
+				return nil
+			}
+		}
 		_, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
 		return err
 	})
