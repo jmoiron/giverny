@@ -34,7 +34,7 @@ server {
         expires 10m;
     }
 
-    location ~^/media/ {
+    location ^~/media/ {
         alias /opt/giverny/media/;
         expires 1d;
     }
