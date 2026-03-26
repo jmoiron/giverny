@@ -112,7 +112,7 @@ $(function() {
     function applyCardColorButtonState($scope) {
         var $btn = $scope.find('.quick-color-btn').first();
         if (!$btn.length) return;
-        var color = String($btn.data('card-color') || $scope.find('.card-detail').data('card-color') || '').trim();
+        var color = String($btn.attr('data-card-color') || $scope.find('.card-detail').attr('data-card-color') || '').trim();
         var $icon = $btn.find('i').first();
         if (!color) {
             $icon[0].className = 'fa-regular fa-square';
@@ -274,6 +274,7 @@ $(function() {
         var $detail = $scope.find('.card-detail').first();
         if ($detail.length) {
             $detail.attr('data-card-color', normalized);
+            $detail.toggleClass('has-card-color', !!normalized);
         }
         var cardId = $scope.find('#card-detail-form').data('id');
         var $boardCard = $('.kanban-card[data-id="' + cardId + '"]').first();
@@ -1416,7 +1417,7 @@ $(function() {
                 if (requestID !== cardModalRequestID) return;
                 $cardModal.find('.card-modal-inner').html(html);
                 var $form = $cardModal.find('#card-detail-form');
-                updateCardAccent($cardModal, $form.closest('.card-detail').data('card-color') || '');
+                updateCardAccent($cardModal, $form.closest('.card-detail').attr('data-card-color') || '');
                 applyCardColorButtonState($cardModal);
                 updateSelectedLabelsState();
                 setRemoteCardState(
@@ -1828,7 +1829,7 @@ $(function() {
     $(document).on('click', '.color-swatch-btn[data-color]', function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        var color = $(this).data('color') || '';
+        var color = $(this).attr('data-color') || '';
         post('/boards/' + board + '/cards/' + cardId + '/color', { color: color })
             .then(function(r) { return r.json(); })
             .then(function(data) {
