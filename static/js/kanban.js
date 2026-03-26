@@ -165,6 +165,7 @@ $(function() {
     }
 
     function enableDescriptionEditing($form) {
+        if (!$form.length || String($form.attr('data-can-edit')) !== '1') return;
         if ($form.closest('.card-detail').hasClass('editing-description')) return;
         $form.closest('.card-detail').addClass('editing-description');
         showCardSave($form);

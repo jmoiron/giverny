@@ -14,22 +14,28 @@
     <a href="#" class="modal-close" id="card-modal-close" aria-label="close">
         <i class="fa-solid fa-xmark"></i>
     </a>
-    <form id="card-detail-form" data-id="{{.card.ID}}">
+    <form id="card-detail-form" data-id="{{.card.ID}}" data-can-edit="{{if .canEdit}}1{{else}}0{{end}}">
         <input type="hidden" name="color" value="{{.card.Color}}">
         <div class="card-detail-layout">
             <div class="card-main-pane">
+                {{if .canEdit}}
                 <div class="card-edit-warning is-hidden" id="card-edit-warning">
                     warning: card information has been modified elsewhere
                 </div>
                 <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
+                {{else}}
+                <div class="card-title-display">{{.card.Title}}</div>
+                {{end}}
                 <div class="card-assignees{{if not .card.Assignees}} is-empty{{end}}" id="card-assignees">
                     {{range .card.Assignees}}
                     <span class="card-assignee-pill" data-user-id="{{.ID}}">
                         {{if .ProfileImageURI}}<img class="card-assignee-avatar" src="{{.ProfileImageURI}}" alt="">{{end}}
                         <span class="card-assignee-name">{{.Username}}</span>
+                        {{if $.canEdit}}
                         <a href="#" class="card-assignee-remove inline-remove-link" aria-label="remove {{.Username}}">
                             <i class="fa-solid fa-xmark"></i>
                         </a>
+                        {{end}}
                     </span>
                     {{end}}
                 </div>
@@ -41,13 +47,16 @@
                             {{range .card.Labels}}
                             <span class="label-pill selected {{.TextClass}}" data-label-id="{{.ID}}" style="--label-color: {{.Color}}" title="{{.Description}}">
                                 <span>{{.Title}}</span>
+                                {{if $.canEdit}}
                                 <a href="#" class="label-remove-btn" aria-label="remove {{.Title}} label">
                                     <i class="fa-solid fa-circle-xmark"></i>
                                 </a>
                                 <input type="hidden" name="label_ids" value="{{.ID}}">
+                                {{end}}
                             </span>
                             {{end}}
                         </div>
+                        {{if .canEdit}}
                         <div class="label-add-row">
                             <div class="label-picker" id="card-label-picker">
                                 <input id="card-label-input" type="text" autocomplete="off" placeholder="find or add a label">
@@ -64,6 +73,7 @@
                                  data-description="{{.Description}}"></div>
                             {{end}}
                         </div>
+                        {{end}}
                     </div>
                 </div>
 
@@ -83,23 +93,29 @@
                                 </div>
                             </div>
                             <div class="card-attachment-actions">
+                                {{if $.canEdit}}
                                 <a href="#" class="card-attachment-rename" aria-label="rename attachment">
                                     <i class="fa-solid fa-pen-to-square"></i>
                                 </a>
+                                {{end}}
                                 <a href="#" class="card-attachment-copy" aria-label="copy attachment link">
                                     <i class="fa-regular fa-copy"></i>
                                 </a>
+                                {{if $.canEdit}}
                                 <a href="#" class="card-attachment-delete inline-remove-link" aria-label="delete attachment">
                                     <i class="fa-solid fa-xmark"></i>
                                 </a>
+                                {{end}}
                             </div>
                         </div>
                         {{end}}
                     </div>
+                    {{if .canEdit}}
                     <div class="card-attachment-rename-actions is-hidden" id="card-attachment-rename-actions">
                         <a href="#" class="card-attachment-rename-cancel">cancel</a>
                         <button type="button" class="card-attachment-rename-save">save</button>
                     </div>
+                    {{end}}
                 </div>
 
                 <div class="card-section">
@@ -111,11 +127,13 @@
                         double-click to add a markdown description
                         {{end}}
                     </div>
+                    {{if .canEdit}}
                     <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
                     <div class="card-actions is-hidden">
                         <a href="#" class="card-cancel-link" id="card-edit-cancel">cancel</a>
                         <button type="submit">save</button>
                     </div>
+                    {{end}}
                 </div>
 
                 <div class="card-section checklist-section{{if not .checklist.Exists}} is-empty{{end}}" id="card-checklist-section">
@@ -128,24 +146,29 @@
                     </div>
                     <div class="checklist-items{{if not .checklist.Items}} is-empty{{end}}" id="card-checklist-items">
                         {{range .checklist.Items}}
-                        <label class="checklist-item{{if .Done}} is-done{{end}}" data-item-id="{{.ID}}" draggable="true">
-                            <input type="checkbox" class="checklist-item-toggle"{{if .Done}} checked{{end}}>
+                        <label class="checklist-item{{if .Done}} is-done{{end}}" data-item-id="{{.ID}}"{{if $.canEdit}} draggable="true"{{end}}>
+                            <input type="checkbox" class="checklist-item-toggle"{{if .Done}} checked{{end}}{{if not $.canEdit}} disabled{{end}}>
                             <span class="checklist-item-text">{{.Text}}</span>
+                            {{if $.canEdit}}
                             <a href="#" class="checklist-item-delete inline-remove-link" aria-label="delete checklist item">
                                 <i class="fa-solid fa-xmark"></i>
                             </a>
+                            {{end}}
                         </label>
                         {{end}}
                     </div>
+                    {{if .canEdit}}
                     <input type="text" id="checklist-new-item-input" autocomplete="off" placeholder="add an item">
                     <div class="checklist-actions-row">
                         <button type="button" class="quick-control-btn checklist-toggle-completed-btn" id="checklist-toggle-completed-btn">hide completed</button>
                         <button type="button" class="quick-control-btn checklist-delete-btn" id="checklist-delete-btn">delete</button>
                     </div>
+                    {{end}}
                 </div>
             </div>
 
             <aside class="card-quick-pane">
+                {{if .canEdit}}
                 <div class="quick-controls-title">quick controls</div>
                 <button type="button" class="quick-control-btn{{if .isDone}} is-active done-btn{{end}}" id="card-done-btn" data-card-id="{{.card.ID}}" data-done="{{if .isDone}}1{{else}}0{{end}}">
                     <i class="fa-solid fa-check"></i><span>{{if .isDone}}done{{else}}mark as done{{end}}</span>
@@ -190,6 +213,7 @@
                     <i class="fa-solid fa-list-check"></i><span>checklist</span>
                 </button>
                 <div class="quick-control-divider"></div>
+                {{end}}
                 <div class="quick-section-title">dates</div>
                 <div class="quick-date-list">
                     <div class="quick-date-item">
@@ -201,6 +225,7 @@
                         <span class="quick-date-value" id="card-updated-at-display">{{.updatedAtDisplay}}</span>
                     </div>
                 </div>
+                {{if .canEdit}}
                 <button type="button" class="quick-control-btn quick-panel-trigger" id="card-due-date-btn" data-panel="card-due-date-panel">
                     <i class="fa-solid fa-calendar-check"></i><span>due date</span>
                     <span class="quick-control-meta" id="card-due-date-display">{{if .card.DueDate}}{{.card.DueDate.Format "Jan 2, 2006"}}{{else}}unset{{end}}</span>
@@ -266,8 +291,26 @@
                 {{else}}
                 <button type="button" class="quick-control-btn danger-btn" id="card-archive-btn" data-card-id="{{.card.ID}}">archive</button>
                 {{end}}
+                {{else}}
+                <div class="quick-date-list">
+                    <div class="quick-date-item">
+                        <span class="quick-date-label">due date</span>
+                        <span class="quick-date-value" id="card-due-date-display">{{if .card.DueDate}}{{.card.DueDate.Format "Jan 2, 2006"}}{{else}}unset{{end}}</span>
+                    </div>
+                    <div class="quick-date-item">
+                        <span class="quick-date-label">start date</span>
+                        <span class="quick-date-value" id="card-start-date-display">{{if .card.StartDate}}{{.card.StartDate.Format "Jan 2, 2006"}}{{else}}unset{{end}}</span>
+                    </div>
+                    <div class="quick-date-item">
+                        <span class="quick-date-label">column</span>
+                        <span class="quick-date-value">{{range .columns}}{{if eq .ID $.card.ColumnID}}{{.Name}}{{end}}{{end}}</span>
+                    </div>
+                </div>
+                {{end}}
             </aside>
         </div>
+        {{if .canEdit}}
         <input type="file" id="card-attachment-input" multiple hidden>
+        {{end}}
     </form>
 </div>

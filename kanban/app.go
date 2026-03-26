@@ -136,7 +136,6 @@ func (a *App) Bind(r chi.Router) {
 			r.Get("/ws", a.handleWS)
 
 			r.Group(func(r chi.Router) {
-				r.Use(gauth.RequireAuth)
 				r.Use(a.requireBoardWrite)
 				r.Get("/edit", a.handleBoardEditForm)
 				r.Post("/edit", a.handleBoardEditSubmit)
@@ -154,8 +153,14 @@ func (a *App) Bind(r chi.Router) {
 					r.Post("/reorder", a.handleReorderCards)
 				})
 
-				r.Route("/cards/{cardID}", func(r chi.Router) {
-					r.Get("/", a.handleGetCard)
+				r.Post("/cards/archived/delete", a.handleDeleteArchivedCards)
+			})
+
+			r.Route("/cards/{cardID}", func(r chi.Router) {
+				r.Get("/", a.handleGetCard)
+
+				r.Group(func(r chi.Router) {
+					r.Use(a.requireBoardWrite)
 					r.Post("/", a.handleUpdateCard)
 					r.Post("/done", a.handleMarkDone)
 					r.Post("/subscribe", a.handleToggleSubscription)
@@ -179,7 +184,6 @@ func (a *App) Bind(r chi.Router) {
 					r.Post("/delete", a.handleDeleteCard)
 					r.Post("/unarchive", a.handleUnarchiveCard)
 				})
-				r.Post("/cards/archived/delete", a.handleDeleteArchivedCards)
 			})
 		})
 	})
@@ -1125,19 +1129,14 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if !canViewBoard(board, user) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	canEdit := canModifyBoard(board, user)
 	cols, err := a.columns.ListByBoard(board.ID)
 	if err != nil {
 		app.Http500("listing columns", w, err)
-		return
-	}
-	knownLabels, err := a.labels.List()
-	if err != nil {
-		app.Http500("listing labels", w, err)
-		return
-	}
-	users, err := a.users.List()
-	if err != nil {
-		app.Http500("listing users", w, err)
 		return
 	}
 	doneCol, err := a.columns.DoneByBoard(board.ID)
@@ -1145,10 +1144,25 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		app.Http500("loading done column", w, err)
 		return
 	}
-	subscribed, err := a.cards.IsSubscribed(card.ID, user.ID)
-	if err != nil {
-		app.Http500("loading subscription state", w, err)
-		return
+	knownLabels := []*Label{}
+	users := []*gauth.User{}
+	subscribed := false
+	if canEdit {
+		knownLabels, err = a.labels.List()
+		if err != nil {
+			app.Http500("listing labels", w, err)
+			return
+		}
+		users, err = a.users.List()
+		if err != nil {
+			app.Http500("listing users", w, err)
+			return
+		}
+		subscribed, err = a.cards.IsSubscribed(card.ID, user.ID)
+		if err != nil {
+			app.Http500("loading subscription state", w, err)
+			return
+		}
 	}
 
 	reg := mtr.RegistryFromContext(r.Context())
@@ -1163,6 +1177,7 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		"isSubscribed":        subscribed,
 		"isDone":              card.ColumnID == doneCol.ID,
 		"currentUser":         user,
+		"canEdit":             canEdit,
 		"createdAtDisplay":    formatTimestampForUser(r.Context(), card.CreatedAt),
 		"updatedAtDisplay":    formatTimestampForUser(r.Context(), card.UpdatedAt),
 		"checklist":           a.cardChecklistPayload(card.ID, card.Checklist),

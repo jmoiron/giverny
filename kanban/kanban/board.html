@@ -119,13 +119,13 @@
     </div>
 </div>
 
-{{if .canEdit}}
 <div id="card-modal" class="modal-overlay">
     <div class="modal card-modal-inner">
         <!-- loaded via AJAX -->
     </div>
 </div>
 
+{{if .canEdit}}
 <div id="column-modal" class="modal-overlay">
     <div class="modal column-modal-inner">
         <a href="#" class="modal-close" id="column-modal-close" aria-label="close">
@@ -162,7 +162,7 @@
         </form>
     </div>
 </div>
+{{end}}
 
 <script src="/static/js/highlight.min.js" defer></script>
 <script src="/static/js/kanban.js" defer></script>
-{{end}}
