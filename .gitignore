@@ -7,3 +7,5 @@ static/fa/ve
 node_modules
 __pycache__
 .gocache/
+media/avatars
+media/attachments

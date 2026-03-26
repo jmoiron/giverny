@@ -12,17 +12,18 @@ It's kanban.
 * There is a user invite link system for creating new users.
 * There is a command line helper for adding your first superadmin.
 * There are boards. Boards have columns. Columns have cards.
+* Cards and columns can be moved around.
+* You can assign users and due dates to cards.
+* You can attach files to cards.
+* You can add a checklist to cards.
 
-A lot of the basics for this are there already (users, boards, columns and cards) but they don't work well enough yet to be used.
+All modifications go through a websocket so all users get live updates from every other user.
+
+Giverny is meant to be a personal/family organizational tool, and might not have features that you'd want for large teams or multi-team organizations. These omissions are deliberate, as it simplifies the use and management of the board.
 
 ### planned
 
 Some things I'd like:
-
-I'd like pretty good simultaneous usersupport:
-
-* all backend mutations result in a websocket message sent to all subscribers of a page
-* all front-end mutations are based on handling a websocket message
 
 I'd like some good non-kanban views:
 
@@ -34,6 +35,7 @@ I'd like decent mobile web support. This _probably_ doesn't mean a mobile kanban
 ### not planned
 
 * boards with user-specific permissions or visibility
+* complex user management, eg. teams
 
 Probably a lot of other stuff.
 
