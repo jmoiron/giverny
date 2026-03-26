@@ -68,6 +68,12 @@ func Default() *Config {
 	c.SessionSecret = "SET-IN-CONFIG-FILE"
 	c.DatabaseURI = "giverny.db"
 	c.BaseURL = "http://localhost:7100"
+	c.FSS.Paths = map[string]string{
+		"avatars": "./data/avatars",
+	}
+	c.FSS.URLs = map[string]string{
+		"avatars": "/media/avatars",
+	}
 	return c
 }
 

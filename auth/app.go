@@ -1,18 +1,25 @@
 package auth
 
 import (
+	"encoding/json"
 	"embed"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	gconf "github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/monet/app"
 	mauth "github.com/jmoiron/monet/auth"
 	"github.com/jmoiron/monet/db"
 	"github.com/jmoiron/monet/db/monarch"
 	"github.com/jmoiron/monet/mtr"
+	"github.com/jmoiron/monet/pkg/vfs"
 )
 
 //go:embed auth/*.html
@@ -25,14 +32,16 @@ type App struct {
 	baseURL string
 	users   *UserProfileService
 	invites *InviteService
+	fss     vfs.Registry
 }
 
-func NewApp(dbh db.DB, baseURL string) *App {
+func NewApp(dbh db.DB, baseURL string, fss vfs.Registry) *App {
 	return &App{
 		db:      dbh,
 		baseURL: baseURL,
 		users:   NewUserProfileService(dbh),
 		invites: NewInviteService(dbh),
+		fss:     fss,
 	}
 }
 
@@ -55,6 +64,7 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("auth/login.html", templates)
 	reg.AddPathFS("auth/invite.html", templates)
 	reg.AddPathFS("auth/users.html", templates)
+	reg.AddPathFS("auth/settings.html", templates)
 }
 
 func (a *App) Bind(r chi.Router) {
@@ -67,6 +77,13 @@ func (a *App) Bind(r chi.Router) {
 		r.Post("/{id}/role", a.handleSetRole)
 		r.Post("/{id}/delete", a.handleDeleteUser)
 		r.Post("/invite", a.handleInviteUser)
+	})
+
+	r.Route("/user/settings", func(r chi.Router) {
+		r.Use(RequireAuth)
+		r.Get("/", a.handleUserSettings)
+		r.Post("/", a.handleUserSettingsSave)
+		r.Post("/avatar-upload", a.handleAvatarUpload)
 	})
 }
 
@@ -242,4 +259,233 @@ func (a *App) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin/users/", http.StatusSeeOther)
+}
+
+type timezoneOption struct {
+	Value string
+	Label string
+}
+
+var settingsTimezones = []timezoneOption{
+	{Value: "UTC", Label: "UTC"},
+	{Value: "America/New_York", Label: "America/New_York"},
+	{Value: "America/Chicago", Label: "America/Chicago"},
+	{Value: "America/Denver", Label: "America/Denver"},
+	{Value: "America/Los_Angeles", Label: "America/Los_Angeles"},
+	{Value: "America/Phoenix", Label: "America/Phoenix"},
+	{Value: "America/Anchorage", Label: "America/Anchorage"},
+	{Value: "Pacific/Honolulu", Label: "Pacific/Honolulu"},
+	{Value: "America/Toronto", Label: "America/Toronto"},
+	{Value: "America/Vancouver", Label: "America/Vancouver"},
+	{Value: "America/Mexico_City", Label: "America/Mexico_City"},
+	{Value: "America/Sao_Paulo", Label: "America/Sao_Paulo"},
+	{Value: "Europe/London", Label: "Europe/London"},
+	{Value: "Europe/Dublin", Label: "Europe/Dublin"},
+	{Value: "Europe/Paris", Label: "Europe/Paris"},
+	{Value: "Europe/Berlin", Label: "Europe/Berlin"},
+	{Value: "Europe/Madrid", Label: "Europe/Madrid"},
+	{Value: "Europe/Rome", Label: "Europe/Rome"},
+	{Value: "Europe/Warsaw", Label: "Europe/Warsaw"},
+	{Value: "Europe/Helsinki", Label: "Europe/Helsinki"},
+	{Value: "Europe/Moscow", Label: "Europe/Moscow"},
+	{Value: "Africa/Johannesburg", Label: "Africa/Johannesburg"},
+	{Value: "Asia/Dubai", Label: "Asia/Dubai"},
+	{Value: "Asia/Kolkata", Label: "Asia/Kolkata"},
+	{Value: "Asia/Bangkok", Label: "Asia/Bangkok"},
+	{Value: "Asia/Singapore", Label: "Asia/Singapore"},
+	{Value: "Asia/Hong_Kong", Label: "Asia/Hong_Kong"},
+	{Value: "Asia/Tokyo", Label: "Asia/Tokyo"},
+	{Value: "Asia/Seoul", Label: "Asia/Seoul"},
+	{Value: "Australia/Perth", Label: "Australia/Perth"},
+	{Value: "Australia/Sydney", Label: "Australia/Sydney"},
+	{Value: "Pacific/Auckland", Label: "Pacific/Auckland"},
+}
+
+func validTimezone(tz string) bool {
+	if tz == "" {
+		return false
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
+}
+
+func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *User, errMsg string, saved bool) {
+	reg := mtr.RegistryFromContext(r.Context())
+	if err := reg.RenderWithBase(w, "base", "auth/settings.html", mtr.Ctx{
+		"title":     "settings",
+		"user":      user,
+		"timezones": settingsTimezones,
+		"saved":     saved,
+		"error":     errMsg,
+	}); err != nil {
+		app.Http500("rendering settings", w, err)
+	}
+}
+
+func (a *App) handleUserSettings(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	a.renderUserSettings(w, r, user, "", false)
+}
+
+func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	wantsJSON := strings.Contains(r.Header.Get("Accept"), "application/json")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	avatarChanged := r.FormValue("profile_image_uri_present") == "1"
+	timezoneChanged := r.FormValue("timezone_present") == "1"
+	autoAssignChanged := r.FormValue("auto_assign_cards_present") == "1"
+	avatarURI := user.ProfileImageURI
+	if avatarChanged {
+		avatarURI = strings.TrimSpace(r.FormValue("profile_image_uri"))
+	}
+	timezone := user.Timezone
+	if timezoneChanged {
+		timezone = strings.TrimSpace(r.FormValue("timezone"))
+		if timezone == "" {
+			timezone = "UTC"
+		}
+	}
+	if !validTimezone(timezone) {
+		updated, err := a.users.GetByID(user.ID)
+		if err != nil {
+			app.Http500("loading user settings", w, err)
+			return
+		}
+		updated.ProfileImageURI = avatarURI
+		updated.Timezone = timezone
+		updated.AutoAssignCards = r.FormValue("auto_assign_cards") != ""
+		if wantsJSON {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":    false,
+				"error": "invalid timezone",
+			})
+			return
+		}
+		a.renderUserSettings(w, r, updated, "invalid timezone", false)
+		return
+	}
+	autoAssign := user.AutoAssignCards
+	if autoAssignChanged {
+		autoAssign = r.FormValue("auto_assign_cards") != ""
+	}
+	if err := a.users.UpdateSettings(user.ID, avatarURI, timezone, autoAssign); err != nil {
+		app.Http500("saving user settings", w, err)
+		return
+	}
+	if wantsJSON {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                true,
+			"profile_image_uri": avatarURI,
+			"timezone":          timezone,
+			"auto_assign_cards": autoAssign,
+		})
+		return
+	}
+	http.Redirect(w, r, "/user/settings/?saved=1", http.StatusSeeOther)
+}
+
+func (a *App) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	cfg := gconf.ConfigFromContext(r.Context())
+	if a.fss == nil {
+		http.Error(w, "avatar storage is not configured", http.StatusInternalServerError)
+		return
+	}
+	uploader, err := a.fss.CreateUploader("avatars")
+	if err != nil {
+		http.Error(w, "avatar storage is not writable", http.StatusInternalServerError)
+		return
+	}
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		http.Error(w, "failed to parse upload", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "file is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, 8<<20))
+	if err != nil {
+		http.Error(w, "failed to read upload", http.StatusBadRequest)
+		return
+	}
+	if len(data) == 0 {
+		http.Error(w, "empty upload", http.StatusBadRequest)
+		return
+	}
+	contentType := http.DetectContentType(data[:min(len(data), 512)])
+	if !strings.HasPrefix(contentType, "image/") {
+		http.Error(w, "only image uploads are supported", http.StatusBadRequest)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+	default:
+		switch contentType {
+		case "image/jpeg":
+			ext = ".jpg"
+		case "image/png":
+			ext = ".png"
+		case "image/gif":
+			ext = ".gif"
+		case "image/webp":
+			ext = ".webp"
+		default:
+			http.Error(w, "unsupported image type", http.StatusBadRequest)
+			return
+		}
+	}
+
+	filename := fmt.Sprintf("user-%d-%d%s", user.ID, time.Now().UnixNano(), ext)
+	basePath, err := a.fss.GetPath("avatars")
+	if err != nil {
+		http.Error(w, "avatar storage path missing", http.StatusInternalServerError)
+		return
+	}
+	destPath := filepath.Join(basePath, filename)
+	if err := os.WriteFile(destPath, data, 0o644); err != nil {
+		http.Error(w, "failed to write avatar", http.StatusInternalServerError)
+		return
+	}
+	fileURL := uploader.GetFileURL(filename)
+	if err := a.users.SetProfileImageURI(user.ID, fileURL); err != nil {
+		_ = os.Remove(destPath)
+		http.Error(w, "failed to save avatar", http.StatusInternalServerError)
+		return
+	}
+
+	// Remove the previous uploaded avatar file if it lived in the avatars filesystem.
+	if prefix := strings.TrimRight(cfg.FSS.URLs["avatars"], "/"); prefix != "" {
+		previous := strings.TrimSpace(user.ProfileImageURI)
+		if previous != "" && strings.HasPrefix(previous, prefix+"/") {
+			oldFilename := strings.TrimPrefix(previous, prefix+"/")
+			if oldFilename != filename {
+				_ = os.Remove(filepath.Join(basePath, filepath.Base(oldFilename)))
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":  true,
+		"url": fileURL,
+	})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

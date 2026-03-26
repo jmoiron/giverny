@@ -47,12 +47,12 @@
                     <i class="fa-solid fa-bell nav-icon" title="notifications"></i>
                     <div class="user-menu-wrap">
                         <button class="user-menu-trigger" id="user-menu-trigger">
-                            {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{end}}
+                            {{if .user.ProfileImageURI}}<img class="avatar" src="{{.user.ProfileImageURI}}" alt="">{{else}}<span class="avatar avatar-fallback" aria-hidden="true"></span>{{end}}
                             <span>{{.user.Username}}</span>
                             <i class="fa-solid fa-chevron-down"></i>
                         </button>
                         <div class="user-dropdown" id="user-dropdown">
-                            <a href="/settings/" class="dropdown-item">
+                            <a href="/user/settings/" class="dropdown-item">
                                 <i class="fa-solid fa-gear dropdown-icon"></i>
                                 <span class="dropdown-label">settings</span>
                             </a>

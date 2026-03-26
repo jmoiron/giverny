@@ -53,7 +53,7 @@
             </div>
             <div class="col-cards" data-column-id="{{.ID}}">
                 {{range .Cards}}
-                <div class="kanban-card" data-id="{{.ID}}" draggable="true">
+                <div class="kanban-card{{if .Color}} has-card-color{{end}}" data-id="{{.ID}}" draggable="true" data-card-color="{{.Color}}"{{if .Color}} style="--card-color: {{.Color}}"{{end}}>
                     <div class="card-title">{{.Title}}</div>
                     {{if .Labels}}
                     <div class="card-labels">
@@ -94,7 +94,7 @@
             </div>
             <div class="col-cards archived-cards" id="archived-cards">
                 {{range .archived}}
-                <div class="kanban-card" data-id="{{.ID}}">
+                <div class="kanban-card{{if .Color}} has-card-color{{end}}" data-id="{{.ID}}" data-card-color="{{.Color}}"{{if .Color}} style="--card-color: {{.Color}}"{{end}}>
                     <div class="card-title">{{.Title}}</div>
                     {{if .Labels}}
                     <div class="card-labels">

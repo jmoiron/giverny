@@ -25,6 +25,7 @@ import (
 	"github.com/jmoiron/monet/db/monarch"
 	"github.com/jmoiron/monet/mtr"
 	"github.com/jmoiron/monet/pkg/hotswap"
+	"github.com/jmoiron/monet/pkg/vfs"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -54,6 +55,7 @@ type options struct {
 
 	GenConf      string
 	RegenSecrets bool
+	AddPaths     bool
 
 	ShowMigration bool
 	Downgrade     string
@@ -119,6 +121,15 @@ func main() {
 		return
 	}
 
+	if opts.AddPaths {
+		if opts.ConfigPath == "" {
+			slog.Error("--add-paths requires --config")
+			os.Exit(-1)
+		}
+		must(addPaths(opts.ConfigPath), "adding missing configured paths")
+		return
+	}
+
 	cfg := die(conf.Load(opts.ConfigPath))("loading config")
 
 	if opts.Debug {
@@ -130,6 +141,14 @@ func main() {
 	}
 
 	dbh := die(sqlx.Connect("sqlite3", cfg.DatabaseURI))("connecting to db", "uri", cfg.DatabaseURI)
+
+	fss := vfs.NewRegistry(vfs.NewURLMapper(cfg.FSS.URLs))
+	for name, path := range cfg.FSS.Paths {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			must(err, "creating filesystem path", "name", name, "path", path)
+		}
+		must(fss.AddPath(name, path), "loading filesystem path", "name", name, "path", path)
+	}
 
 	if opts.ShowMigration {
 		showMigration(dbh)
@@ -144,7 +163,7 @@ func main() {
 	// monet's auth app creates the base user table and provides login/logout
 	authApp := auth.NewApp(&cfg.Config, dbh)
 	// giverny's auth app extends monet's with user_profile + invitations
-	gauthApp := gauth.NewApp(dbh, cfg.BaseURL)
+	gauthApp := gauth.NewApp(dbh, cfg.BaseURL, fss)
 	// smtp app manages email config and sending
 	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
@@ -186,6 +205,12 @@ func main() {
 	}
 
 	r.Get("/", index)
+
+	for name, prefix := range cfg.FSS.URLs {
+		uploader := die(fss.CreateUploader(name))("creating uploader", "name", name)
+		prefix = strings.TrimRight(prefix, "/")
+		r.Handle(prefix+"/*", uploader.GetHandler())
+	}
 
 	staticFS := die(fs.Sub(static, "static"))("initializing static fs")
 	swp := hotswap.NewSwapper(staticFS)
@@ -257,6 +282,7 @@ func parseOpts(opts *options) {
 	pflag.StringVar(&opts.Invite, "invite", "", "send an invitation email to the given address")
 	pflag.StringVar(&opts.GenConf, "gen-conf", "", "generate a config file with random secrets at the given path")
 	pflag.BoolVar(&opts.RegenSecrets, "regen-secrets", false, "regenerate SessionSecret and Secret in the config file (requires --config)")
+	pflag.BoolVar(&opts.AddPaths, "add-paths", false, "add any missing filesystem path/url config from defaults to the config file (requires --config)")
 	pflag.BoolVar(&opts.ShowMigration, "migrations", false, "show migration state for each app")
 	pflag.StringVar(&opts.Downgrade, "downgrade", "", "downgrade a named app by one migration version")
 	pflag.Parse()
@@ -310,6 +336,57 @@ func regenSecrets(path string) error {
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	return enc.Encode(cfg)
+}
+
+// addPaths reads the config file at path, fills in any missing FSS paths/URLs
+// from conf.Default(), and writes the file back in place without disturbing
+// existing configured values.
+func addPaths(path string) error {
+	cfg := &conf.Config{}
+	if err := cfg.FromPath(path); err != nil {
+		return err
+	}
+
+	defaults := conf.Default()
+	if cfg.FSS.Paths == nil {
+		cfg.FSS.Paths = map[string]string{}
+	}
+	if cfg.FSS.URLs == nil {
+		cfg.FSS.URLs = map[string]string{}
+	}
+
+	added := false
+	for name, value := range defaults.FSS.Paths {
+		if _, ok := cfg.FSS.Paths[name]; !ok {
+			cfg.FSS.Paths[name] = value
+			added = true
+		}
+	}
+	for name, value := range defaults.FSS.URLs {
+		if _, ok := cfg.FSS.URLs[name]; !ok {
+			cfg.FSS.URLs[name] = value
+			added = true
+		}
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(cfg); err != nil {
+		return err
+	}
+
+	if added {
+		fmt.Printf("updated %s with missing filesystem config\n", path)
+	} else {
+		fmt.Printf("no missing filesystem config in %s\n", path)
+	}
+	return nil
 }
 
 func runUtil(opts *options, gauthApp *gauth.App, smtpApp *gsmtp.App, baseURL string) bool {

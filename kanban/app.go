@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -31,6 +32,7 @@ type App struct {
 	columns *ColumnService
 	cards   *CardService
 	labels  *LabelService
+	users   *gauth.UserProfileService
 }
 
 func NewApp(dbh db.DB) *App {
@@ -43,6 +45,7 @@ func NewApp(dbh db.DB) *App {
 		columns: NewColumnService(dbh),
 		cards:   NewCardService(dbh),
 		labels:  NewLabelService(dbh),
+		users:   gauth.NewUserProfileService(dbh),
 	}
 }
 
@@ -57,11 +60,13 @@ func (a *App) Migrate() error {
 		BoardMigrations,
 		ColumnMigrations,
 		CardMigrations,
+		CardAssigneeMigrations,
 		LabelMigrations,
 		ChecklistMigrations,
 		CommentMigrations,
 		AttachmentMigrations,
 		ActivityMigrations,
+		SubscriptionMigrations,
 		CardFTSMigrations,
 		CommentFTSMigrations,
 	}
@@ -121,6 +126,13 @@ func (a *App) Bind(r chi.Router) {
 			r.Route("/cards/{cardID}", func(r chi.Router) {
 				r.Get("/", a.handleGetCard)
 				r.Post("/", a.handleUpdateCard)
+				r.Post("/done", a.handleMarkDone)
+				r.Post("/subscribe", a.handleToggleSubscription)
+				r.Post("/color", a.handleSetCardColor)
+				r.Post("/assign", a.handleSetCardAssignee)
+				r.Post("/assignees/{userID}/delete", a.handleRemoveCardAssignee)
+				r.Post("/start-date", a.handleSetCardStartDate)
+				r.Post("/due-date", a.handleSetCardDueDate)
 				r.Post("/labels", a.handleAddCardLabel)
 				r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
 				r.Post("/move", a.handleMoveCard)
@@ -212,6 +224,85 @@ func parseID(s string) (int64, error) {
 	var id int64
 	_, err := fmt.Sscan(s, &id)
 	return id, err
+}
+
+func parseOptionalDate(s string) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (a *App) renderCardSnippet(r *http.Request, card *Card) (string, error) {
+	reg := mtr.RegistryFromContext(r.Context())
+	var buf bytes.Buffer
+	if err := reg.Render(&buf, "kanban/card_snippet.html", mtr.Ctx{
+		"card": card,
+	}); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func (a *App) cardResponse(r *http.Request, card *Card) map[string]any {
+	html, err := a.renderCardSnippet(r, card)
+	if err != nil {
+		slog.Error("rendering card snippet", "err", err)
+	}
+	assignees := make([]map[string]any, 0, len(card.Assignees))
+	for _, assignee := range card.Assignees {
+		assignees = append(assignees, map[string]any{
+			"id":                assignee.ID,
+			"username":          assignee.Username,
+			"profile_image_uri": assignee.ProfileImageURI,
+		})
+	}
+	var startDateValue, dueDateValue string
+	if card.StartDate != nil {
+		startDateValue = card.StartDate.Format("2006-01-02")
+	}
+	if card.DueDate != nil {
+		dueDateValue = card.DueDate.Format("2006-01-02")
+	}
+	return map[string]any{
+		"ok":                 true,
+		"id":                 card.ID,
+		"title":              card.Title,
+		"content":            card.Content,
+		"content_rendered":   card.ContentRendered,
+		"color":              card.Color,
+		"column_id":          card.ColumnID,
+		"assignees":          assignees,
+		"start_date":         card.StartDate,
+		"start_date_value":   startDateValue,
+		"due_date":           card.DueDate,
+		"due_date_value":     dueDateValue,
+		"updated_at_value":   card.UpdatedAt.Format(time.RFC3339),
+		"updated_at_display": card.UpdatedAt.Format("15:04 Jan 2"),
+		"html":               html,
+	}
+}
+
+func (a *App) cardDateUpdatedPayload(card *Card) CardDateUpdatedPayload {
+	var startDateValue, dueDateValue string
+	if card.StartDate != nil {
+		startDateValue = card.StartDate.Format("2006-01-02")
+	}
+	if card.DueDate != nil {
+		dueDateValue = card.DueDate.Format("2006-01-02")
+	}
+	return CardDateUpdatedPayload{
+		CardID:           card.ID,
+		StartDateValue:   startDateValue,
+		DueDateValue:     dueDateValue,
+		UpdatedAtValue:   card.UpdatedAt.Format(time.RFC3339),
+		UpdatedAtDisplay: card.UpdatedAt.Format("15:04 Jan 2"),
+	}
 }
 
 func canViewBoard(board *Board, user *gauth.User) bool {
@@ -571,6 +662,17 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		app.Http500("creating card", w, err)
 		return
 	}
+	if user.AutoAssignCards {
+		if err := a.cards.AddAssignee(card.ID, user.ID); err != nil {
+			app.Http500("assigning created card", w, err)
+			return
+		}
+		card, err = a.cards.Get(card.ID)
+		if err != nil {
+			app.Http500("reloading created card", w, err)
+			return
+		}
+	}
 
 	reg := mtr.RegistryFromContext(r.Context())
 	var buf bytes.Buffer
@@ -716,6 +818,7 @@ func (a *App) handleDeleteLabelPage(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	cardIDStr := chi.URLParam(r, "cardID")
+	user := gauth.UserFromContext(r.Context())
 
 	board, err := a.boards.GetBySlug(slug)
 	if err != nil {
@@ -746,6 +849,21 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		app.Http500("listing labels", w, err)
 		return
 	}
+	users, err := a.users.List()
+	if err != nil {
+		app.Http500("listing users", w, err)
+		return
+	}
+	doneCol, err := a.columns.DoneByBoard(board.ID)
+	if err != nil {
+		app.Http500("loading done column", w, err)
+		return
+	}
+	subscribed, err := a.cards.IsSubscribed(card.ID, user.ID)
+	if err != nil {
+		app.Http500("loading subscription state", w, err)
+		return
+	}
 
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.Render(w, "kanban/card.html", mtr.Ctx{
@@ -754,6 +872,11 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		"columns":             cols,
 		"board":               board,
 		"knownLabels":         knownLabels,
+		"users":               users,
+		"paletteColors":       labelPalette,
+		"isSubscribed":        subscribed,
+		"isDone":              card.ColumnID == doneCol.ID,
+		"currentUser":         user,
 	}); err != nil {
 		slog.Error("rendering card", "err", err)
 	}
@@ -762,6 +885,7 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 	board := chi.URLParam(r, "slug")
 	cardIDStr := chi.URLParam(r, "cardID")
+	user := gauth.UserFromContext(r.Context())
 	cardID, err := parseID(cardIDStr)
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, "invalid card id")
@@ -811,6 +935,7 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 			CardID: card.ID,
 			Title:  card.Title,
 		})
+		_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" updated the card title")
 	}
 	if prevCard.Content != card.Content {
 		a.publishBoardEvent(board, EventCardDescriptionModified, CardDescriptionModifiedPayload{
@@ -818,14 +943,225 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 			Content:         card.Content,
 			ContentRendered: card.ContentRendered,
 		})
+		_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" updated the card description")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":               cardID,
-		"title":            card.Title,
-		"content":          card.Content,
-		"content_rendered": card.ContentRendered,
-		"html":             buf.String(),
+	resp := a.cardResponse(r, card)
+	resp["html"] = buf.String()
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (a *App) handleMarkDone(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	prevCard, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading current card failed")
+		return
+	}
+	if err := a.cards.MarkDone(cardID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "mark done failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	fromCardIDs, fromErr := a.cards.IDsByColumn(prevCard.ColumnID)
+	toCardIDs, toErr := a.cards.IDsByColumn(card.ColumnID)
+	if fromErr == nil && toErr == nil && prevCard.ColumnID != card.ColumnID {
+		payload := CardMovedPayload{
+			CardID:       card.ID,
+			FromColumnID: prevCard.ColumnID,
+			ToColumnID:   card.ColumnID,
+			FromCardIDs:  fromCardIDs,
+			ToCardIDs:    toCardIDs,
+		}
+		a.publishBoardEvent(slug, EventCardMoved, payload)
+		writeJSON(w, http.StatusOK, payload)
+	} else {
+		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+	}
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" marked the card done")
+}
+
+func (a *App) handleToggleSubscription(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	enabled := r.FormValue("subscribed") == "1"
+	if enabled {
+		err = a.cards.Subscribe(cardID, user.ID)
+	} else {
+		err = a.cards.Unsubscribe(cardID, user.ID)
+	}
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "subscription update failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "subscribed": enabled})
+}
+
+func (a *App) handleSetCardColor(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	slug := chi.URLParam(r, "slug")
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if err := a.cards.SetColor(cardID, r.FormValue("color")); err != nil {
+		apiErr(w, http.StatusInternalServerError, "color update failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	a.publishBoardEvent(slug, EventCardColorChanged, CardColorChangedPayload{
+		CardID: card.ID,
+		Color:  card.Color,
 	})
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card color")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleSetCardAssignee(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	raw := strings.TrimSpace(r.FormValue("assignee_id"))
+	assigneeID, err := parseID(raw)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid assignee id")
+		return
+	}
+	if _, err := a.users.GetByID(assigneeID); err != nil {
+		apiErr(w, http.StatusBadRequest, "assignee not found")
+		return
+	}
+	if err := a.cards.AddAssignee(cardID, assigneeID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "assignee update failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card assignee")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleRemoveCardAssignee(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	assigneeID, err := parseID(chi.URLParam(r, "userID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid assignee id")
+		return
+	}
+	if err := a.cards.RemoveAssignee(cardID, assigneeID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "assignee remove failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" removed a card assignee")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleSetCardStartDate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	startDate, err := parseOptionalDate(r.FormValue("date"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid date")
+		return
+	}
+	if err := a.cards.SetStartDate(cardID, startDate); err != nil {
+		apiErr(w, http.StatusInternalServerError, "start date update failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card start date")
+	a.publishBoardEvent(slug, EventCardDateUpdated, a.cardDateUpdatedPayload(card))
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleSetCardDueDate(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	dueDate, err := parseOptionalDate(r.FormValue("date"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid date")
+		return
+	}
+	if err := a.cards.SetDueDate(cardID, dueDate); err != nil {
+		apiErr(w, http.StatusInternalServerError, "due date update failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card due date")
+	a.publishBoardEvent(slug, EventCardDateUpdated, a.cardDateUpdatedPayload(card))
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
 }
 
 func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {
@@ -887,6 +1223,7 @@ func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleArchiveCard(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
 	cardIDStr := chi.URLParam(r, "cardID")
 	cardID, err := parseID(cardIDStr)
 	if err != nil {
@@ -897,11 +1234,13 @@ func (a *App) handleArchiveCard(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusInternalServerError, "archive failed")
 		return
 	}
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" archived the card")
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleUnarchiveCard(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
 	cardIDStr := chi.URLParam(r, "cardID")
 	cardID, err := parseID(cardIDStr)
 	if err != nil {
@@ -928,6 +1267,7 @@ func (a *App) handleUnarchiveCard(w http.ResponseWriter, r *http.Request) {
 		"column_id": card.ColumnID,
 		"html":      buf.String(),
 	})
+	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" unarchived the card")
 }
 
 func (a *App) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
@@ -977,6 +1317,7 @@ func (a *App) handleDeleteArchivedCards(w http.ResponseWriter, r *http.Request) 
 
 func (a *App) handleAddCardLabel(w http.ResponseWriter, r *http.Request) {
 	board := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
 	cardID, err := parseID(chi.URLParam(r, "cardID"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, "invalid card id")
@@ -1010,11 +1351,13 @@ func (a *App) handleAddCardLabel(w http.ResponseWriter, r *http.Request) {
 			Description: label.Description,
 		},
 	})
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added label "+label.Title)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleRemoveCardLabel(w http.ResponseWriter, r *http.Request) {
 	board := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
 	cardID, err := parseID(chi.URLParam(r, "cardID"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, "invalid card id")
@@ -1033,6 +1376,9 @@ func (a *App) handleRemoveCardLabel(w http.ResponseWriter, r *http.Request) {
 		CardID:  cardID,
 		LabelID: labelID,
 	})
+	if label, err := a.labels.Get(labelID); err == nil {
+		_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" removed label "+label.Title)
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

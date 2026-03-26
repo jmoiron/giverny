@@ -122,4 +122,219 @@ $(function() {
         }
     });
 
+    function syncAvatarPreview(url) {
+        var $preview = $('#settings-avatar-preview');
+        if (!$preview.length) return;
+        var normalized = String(url || '').trim();
+        if ($preview.is('img')) {
+            if (normalized) {
+                $preview.attr('src', normalized);
+                return;
+            }
+            var $fallback = $('<span class="settings-avatar avatar-fallback" id="settings-avatar-preview"></span>');
+            $preview.replaceWith($fallback);
+            return;
+        }
+        if (normalized) {
+            var $img = $('<img class="settings-avatar" id="settings-avatar-preview" alt="">');
+            $img.attr('src', normalized);
+            $preview.replaceWith($img);
+        }
+    }
+
+    function setSettingsStatus(kind, text) {
+        var $status = $('#settings-status');
+        if (!$status.length) return;
+        if (!text) {
+            $status.attr('hidden', 'hidden').removeClass('error').text('');
+            return;
+        }
+        $status.removeAttr('hidden').removeClass('error').addClass(kind || '').text(text);
+    }
+
+    var settingsSaveTimers = {};
+    var settingsSaveSeq = 0;
+    var avatarDirty = false;
+
+    function saveUserSetting(field) {
+        var $form = $('#user-settings-form');
+        if (!$form.length) return;
+        var seq = ++settingsSaveSeq;
+        var formData = new URLSearchParams();
+        if (field === 'profile_image_uri') {
+            formData.set('profile_image_uri_present', '1');
+            formData.set('profile_image_uri', $('#profile-image-uri').val() || '');
+        } else if (field === 'timezone') {
+            formData.set('timezone_present', '1');
+            formData.set('timezone', $('#timezone-select').val() || '');
+        } else if (field === 'auto_assign_cards') {
+            formData.set('auto_assign_cards_present', '1');
+            if ($('#auto-assign-cards').is(':checked')) formData.set('auto_assign_cards', '1');
+        } else {
+            return;
+        }
+        setSettingsStatus('', '');
+        fetch($form.attr('action'), {
+            method: 'POST',
+            body: formData.toString(),
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            }
+        })
+            .then(function(resp) {
+                return resp.json().catch(function() {
+                    return {};
+                }).then(function(data) {
+                    if (!resp.ok) {
+                        throw new Error(data.error || 'save failed');
+                    }
+                    return data;
+                });
+            })
+            .then(function(data) {
+                if (seq !== settingsSaveSeq) return;
+                if (field === 'profile_image_uri' && typeof data.profile_image_uri !== 'undefined') {
+                    $('#profile-image-uri').val(data.profile_image_uri || '');
+                    syncAvatarPreview(data.profile_image_uri || '');
+                }
+                if (field === 'timezone' && typeof data.timezone !== 'undefined') {
+                    $('#timezone-select').val(data.timezone || 'UTC');
+                }
+                if (field === 'auto_assign_cards' && typeof data.auto_assign_cards !== 'undefined') {
+                    $('#auto-assign-cards').prop('checked', !!data.auto_assign_cards);
+                }
+                if (field === 'profile_image_uri') avatarDirty = false;
+            })
+            .catch(function(err) {
+                if (seq !== settingsSaveSeq) return;
+                setSettingsStatus('error', err.message || 'save failed');
+            });
+    }
+
+    function scheduleSettingsSave(delay, field) {
+        window.clearTimeout(settingsSaveTimers[field]);
+        settingsSaveTimers[field] = window.setTimeout(function() {
+            saveUserSetting(field);
+        }, delay || 0);
+    }
+
+    $('#profile-image-uri').on('input', function() {
+        syncAvatarPreview($(this).val());
+        avatarDirty = true;
+        setSettingsStatus('', '');
+    });
+
+    $('#avatar-url-save').on('click', function() {
+        avatarDirty = true;
+        scheduleSettingsSave(0, 'profile_image_uri');
+    });
+
+    $('#timezone-autodetect').on('click', function() {
+        var tz = '';
+        try {
+            tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        } catch (err) {
+            tz = '';
+        }
+        if (!tz) return;
+        var $select = $('#timezone-select');
+        if (!$select.find('option[value="' + tz + '"]').length) {
+            $select.append('<option value="' + tz + '">' + tz + '</option>');
+        }
+        $select.val(tz);
+        scheduleSettingsSave(0, 'timezone');
+    });
+
+    $('#timezone-select').on('change', function() {
+        scheduleSettingsSave(0, 'timezone');
+    });
+
+    $('#auto-assign-cards').on('change', function() {
+        scheduleSettingsSave(0, 'auto_assign_cards');
+    });
+
+    var $avatarUploadModal = $('#avatar-upload-modal');
+    var $avatarDropzone = $('#avatar-upload-dropzone');
+    var $avatarInput = $('#avatar-upload-input');
+    var $avatarStatus = $('#avatar-upload-status');
+
+    function closeAvatarUploadModal() {
+        $avatarUploadModal.removeClass('active');
+        $avatarDropzone.removeClass('is-dragging');
+        $avatarStatus.removeClass('is-error').text('');
+        $avatarInput.val('');
+    }
+
+    function uploadAvatarFile(file) {
+        if (!file) return;
+        var formData = new FormData();
+        formData.append('file', file);
+        $avatarStatus.removeClass('is-error').text('uploading...');
+        fetch('/user/settings/avatar-upload', {
+            method: 'POST',
+            body: formData
+        })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    return resp.text().then(function(text) {
+                        throw new Error(text || 'upload failed');
+                    });
+                }
+                return resp.json();
+            })
+            .then(function(data) {
+                $('#profile-image-uri').val(data.url || '');
+                syncAvatarPreview(data.url || '');
+                avatarDirty = true;
+                scheduleSettingsSave(0, 'profile_image_uri');
+                closeAvatarUploadModal();
+            })
+            .catch(function(err) {
+                $avatarStatus.addClass('is-error').text(err.message || 'upload failed');
+            });
+    }
+
+    $('#avatar-upload-open').on('click', function() {
+        $avatarUploadModal.addClass('active');
+    });
+
+    $('#avatar-upload-close').on('click', function(e) {
+        e.preventDefault();
+        closeAvatarUploadModal();
+    });
+
+    $avatarUploadModal.on('click', function(e) {
+        if (e.target === this) closeAvatarUploadModal();
+    });
+
+    $avatarDropzone.on('click', function() {
+        $avatarInput.trigger('click');
+    });
+
+    $avatarDropzone.on('dragenter dragover', function(e) {
+        e.preventDefault();
+        $avatarDropzone.addClass('is-dragging');
+    });
+
+    $avatarDropzone.on('dragleave', function(e) {
+        e.preventDefault();
+        if (e.target === this) {
+            $avatarDropzone.removeClass('is-dragging');
+        }
+    });
+
+    $avatarDropzone.on('drop', function(e) {
+        e.preventDefault();
+        $avatarDropzone.removeClass('is-dragging');
+        var files = null;
+        if (e.originalEvent && e.originalEvent.dataTransfer) files = e.originalEvent.dataTransfer.files;
+        else if (e.dataTransfer) files = e.dataTransfer.files;
+        if (files && files.length) uploadAvatarFile(files[0]);
+    });
+
+    $avatarInput.on('change', function() {
+        if (this.files && this.files.length) uploadAvatarFile(this.files[0]);
+    });
+
 });

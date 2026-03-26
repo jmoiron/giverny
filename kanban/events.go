@@ -14,6 +14,8 @@ const (
 	EventCardMoved               = "card.move"
 	EventCardReordered           = "card.reorder"
 	EventCardArchived            = "card.archived"
+	EventCardColorChanged        = "card.color.changed"
+	EventCardDateUpdated         = "card.date.updated"
 	EventCardTitleModified       = "card.title.modified"
 	EventCardDescriptionModified = "card.description.modified"
 	EventCardLabelAdded          = "card.label.added"
@@ -61,6 +63,19 @@ type CardDescriptionModifiedPayload struct {
 	CardID          int64  `json:"card_id"`
 	Content         string `json:"content"`
 	ContentRendered string `json:"content_rendered"`
+}
+
+type CardColorChangedPayload struct {
+	CardID int64  `json:"card_id"`
+	Color  string `json:"color"`
+}
+
+type CardDateUpdatedPayload struct {
+	CardID            int64  `json:"card_id"`
+	StartDateValue    string `json:"start_date_value"`
+	DueDateValue      string `json:"due_date_value"`
+	UpdatedAtValue    string `json:"updated_at_value"`
+	UpdatedAtDisplay  string `json:"updated_at_display"`
 }
 
 type CardReorderedPayload struct {

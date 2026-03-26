@@ -427,6 +427,7 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
 }
 
 .kanban-card {
+    --card-color: transparent;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -449,6 +450,11 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
 
     &:active {
         cursor: pointer;
+    }
+
+    &.has-card-color {
+        border-top: 5px solid var(--card-color);
+        padding-top: 0.4rem;
     }
 
     .card-title {
@@ -613,6 +619,12 @@ body.drag-column .board-columns * {
         width: min(96vw, 720px);
         max-width: 720px;
         position: relative;
+        --card-color: var(--surface);
+        border-top: 6px solid var(--card-color);
+
+        &.has-card-color {
+            border-top-color: var(--card-color);
+        }
     }
 
     .modal.column-modal-inner {
@@ -697,6 +709,7 @@ body.drag-column .board-columns * {
         display: flex;
         flex-direction: column;
         gap: 0.55rem;
+        position: relative;
     }
 
     .quick-controls-title,
@@ -731,6 +744,14 @@ body.drag-column .board-columns * {
             filter: brightness(1.04);
         }
 
+        &.is-active.done-btn {
+            color: var(--green);
+        }
+
+        &.is-active.subscribed-btn {
+            color: var(--accent);
+        }
+
         &.danger-btn {
             color: var(--red);
         }
@@ -747,6 +768,141 @@ body.drag-column .board-columns * {
                 background: var(--red);
                 filter: brightness(1.05);
             }
+        }
+    }
+
+    .quick-control-meta {
+        margin-left: auto;
+        font-size: 0.72rem;
+        color: var(--muted);
+    }
+
+    .quick-control-panel {
+        background: color-mix(in srgb, var(--surface) 82%, var(--hover-bg) 18%);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.55rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        position: absolute;
+        left: 1rem;
+        right: 0;
+        z-index: 120;
+        box-shadow: 3px 4px 0 rgba(0,0,0,0.18);
+    }
+
+    .color-swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+
+    .color-swatch-btn {
+        --swatch-color: transparent;
+        width: 100%;
+        height: 1.6rem;
+        min-width: 0;
+        padding: 0;
+        line-height: 1;
+        border-radius: 5px;
+        border: 2px solid color-mix(in srgb, var(--surface) 88%, var(--border) 12%);
+        background: var(--swatch-color);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 0.82rem;
+
+        &:hover {
+            border-color: var(--text);
+            background: var(--swatch-color);
+        }
+
+        &.clear-swatch-btn,
+        &.more-swatch-btn {
+            background: var(--hover-bg);
+        }
+    }
+
+    .assign-picker-panel input[type=text],
+    .date-picker-panel input[type=date] {
+        width: 100%;
+    }
+
+    .assign-suggestions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        max-height: 210px;
+        overflow-y: auto;
+    }
+
+    .assign-suggestion {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.08rem;
+        width: 100%;
+        border: none;
+        background: var(--hover-bg);
+        border-radius: 5px;
+        padding: 0.45rem 0.5rem;
+        cursor: pointer;
+
+        &:hover,
+        &.active {
+            filter: brightness(1.05);
+        }
+    }
+
+    .assign-suggestion-name {
+        font-size: 0.88rem;
+        color: var(--text);
+    }
+
+    .assign-suggestion-meta {
+        font-size: 0.74rem;
+        color: var(--muted);
+    }
+
+    .date-quick-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .date-quick-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.45rem;
+        width: 100%;
+        padding: 0.2rem 0;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        color: var(--muted);
+        font-size: 0.84rem;
+        text-align: left;
+        box-shadow: none;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            background: transparent;
+            color: var(--fg);
+            outline: none;
+        }
+
+        i {
+            width: 0.95rem;
+            flex: 0 0 auto;
+            color: currentColor;
+            text-align: center;
+        }
+
+        span {
+            flex: 1 1 auto;
         }
     }
 
@@ -814,8 +970,53 @@ body.drag-column .board-columns * {
         font-size: 1.18rem;
         font-weight: 600;
         width: 100%;
-        margin-bottom: 1rem;
+        margin-bottom: 0.55rem;
         padding-right: 2rem;  // room for close btn
+    }
+
+    .card-assignees {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin-bottom: 0.85rem;
+
+        &.is-empty {
+            display: none;
+        }
+    }
+
+    .card-assignee-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: var(--hover-bg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.22rem 0.45rem 0.22rem 0.22rem;
+    }
+
+    .card-assignee-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .card-assignee-name {
+        font-size: 0.84rem;
+        color: var(--text);
+    }
+
+    .card-assignee-remove {
+        color: var(--muted);
+        text-decoration: none;
+        line-height: 1;
+        font-size: 0.72rem;
+        padding-left: 0.05rem;
+
+        &:hover {
+            color: var(--text);
+        }
     }
 
     .card-edit-warning {

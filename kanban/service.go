@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/monet/db"
 	"github.com/jmoiron/monet/mtr"
 	"github.com/jmoiron/sqlx"
@@ -57,6 +58,17 @@ func sanitizeLabelColor(s string) string {
 		return s
 	}
 	return "#888888"
+}
+
+func sanitizeOptionalColor(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) == 7 && strings.HasPrefix(s, "#") {
+		return s
+	}
+	return ""
 }
 
 func labelTextClass(color string) string {
@@ -320,6 +332,10 @@ func (s *CardService) Get(id int64) (*Card, error) {
 		return &card, err
 	}
 	card.Labels, err = s.labelsForCard(id)
+	if err != nil {
+		return &card, err
+	}
+	card.Assignees, err = s.assigneesForCard(id)
 	return &card, err
 }
 
@@ -333,6 +349,9 @@ func (s *CardService) ListByBoard(boardID int64) ([]*Card, error) {
 		return nil, err
 	}
 	if err := s.attachLabelsByBoard(cards, boardID); err != nil {
+		return nil, err
+	}
+	if err := s.attachAssignees(cards); err != nil {
 		return nil, err
 	}
 	return cards, err
@@ -350,6 +369,9 @@ func (s *CardService) ListArchivedByBoard(boardID int64) ([]*Card, error) {
 	if err := s.attachLabelsByBoard(cards, boardID); err != nil {
 		return nil, err
 	}
+	if err := s.attachAssignees(cards); err != nil {
+		return nil, err
+	}
 	return cards, nil
 }
 
@@ -358,7 +380,7 @@ func (s *CardService) Update(id int64, title, content, color string, labelIDs []
 	return db.With(s.db, func(tx *sqlx.Tx) error {
 		if _, err := tx.Exec(
 			`UPDATE card SET title=?, content=?, content_rendered=?, color=?, updated_at=datetime('now') WHERE id=?`,
-			title, content, rendered, strings.TrimSpace(color), id,
+			title, content, rendered, sanitizeOptionalColor(color), id,
 		); err != nil {
 			return err
 		}
@@ -462,6 +484,39 @@ func (s *CardService) Archive(id int64) error {
 	return err
 }
 
+func (s *CardService) SetColor(id int64, color string) error {
+	_, err := s.db.Exec(`UPDATE card SET color=?, updated_at=datetime('now') WHERE id=?`, sanitizeOptionalColor(color), id)
+	return err
+}
+
+func (s *CardService) AddAssignee(id, assigneeID int64) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO card_assignee (card_id, user_id) VALUES (?, ?)`, id, assigneeID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, id)
+	return err
+}
+
+func (s *CardService) RemoveAssignee(id, assigneeID int64) error {
+	_, err := s.db.Exec(`DELETE FROM card_assignee WHERE card_id=? AND user_id=?`, id, assigneeID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, id)
+	return err
+}
+
+func (s *CardService) SetStartDate(id int64, startDate *time.Time) error {
+	_, err := s.db.Exec(`UPDATE card SET start_date=?, updated_at=datetime('now') WHERE id=?`, startDate, id)
+	return err
+}
+
+func (s *CardService) SetDueDate(id int64, dueDate *time.Time) error {
+	_, err := s.db.Exec(`UPDATE card SET due_date=?, updated_at=datetime('now') WHERE id=?`, dueDate, id)
+	return err
+}
+
 func (s *CardService) Delete(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM card WHERE id=?`, id)
 	return err
@@ -515,23 +570,50 @@ func (s *CardService) IDsByColumn(columnID int64) ([]int64, error) {
 }
 
 func (s *CardService) MarkDone(cardID int64) error {
-	return db.With(s.db, func(tx *sqlx.Tx) error {
-		var card Card
-		if err := tx.Get(&card, `SELECT * FROM card WHERE id=?`, cardID); err != nil {
-			return err
-		}
-		var doneColumnID int64
-		if err := tx.Get(&doneColumnID, `SELECT id FROM board_column WHERE board_id=? AND done=1 ORDER BY id LIMIT 1`, card.BoardID); err != nil {
-			return err
-		}
-		if card.ColumnID == doneColumnID {
-			return nil
-		}
-		var maxPos int
-		_ = tx.Get(&maxPos, `SELECT COALESCE(MAX(position), 0) FROM card WHERE column_id=? AND archived_at IS NULL`, doneColumnID)
-		_, err := tx.Exec(`UPDATE card SET column_id=?, position=?, updated_at=datetime('now') WHERE id=?`, doneColumnID, maxPos+1, cardID)
+	card, err := s.Get(cardID)
+	if err != nil {
 		return err
-	})
+	}
+	doneCol, err := (&ColumnService{db: s.db}).DoneByBoard(card.BoardID)
+	if err != nil {
+		return err
+	}
+	if card.ColumnID == doneCol.ID {
+		return nil
+	}
+	return s.Move(cardID, doneCol.ID, math.MaxInt32)
+}
+
+func (s *CardService) IsSubscribed(cardID, userID int64) (bool, error) {
+	var count int
+	if err := s.db.Get(&count, `SELECT COUNT(*) FROM card_subscription WHERE card_id=? AND user_id=?`, cardID, userID); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *CardService) Subscribe(cardID, userID int64) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO card_subscription (card_id, user_id) VALUES (?, ?)`, cardID, userID)
+	return err
+}
+
+func (s *CardService) Unsubscribe(cardID, userID int64) error {
+	_, err := s.db.Exec(`DELETE FROM card_subscription WHERE card_id=? AND user_id=?`, cardID, userID)
+	return err
+}
+
+func (s *CardService) RecordSubscriptionMessage(cardID int64, message string) error {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO subscription_message (card_id, user_id, message)
+		SELECT ?, user_id, ?
+		FROM card_subscription
+		WHERE card_id=?
+	`, cardID, message, cardID)
+	return err
 }
 
 func (s *CardService) MoveOverdueToLate(boardID int64, now time.Time) (int64, error) {
@@ -608,6 +690,19 @@ func (s *CardService) labelsForCard(cardID int64) ([]*Label, error) {
 	return labels, err
 }
 
+func (s *CardService) assigneesForCard(cardID int64) ([]*gauth.User, error) {
+	var users []*gauth.User
+	err := s.db.Select(&users, `
+		SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.created_at, p.last_login_at
+		FROM card_assignee ca
+		JOIN user u ON u.id = ca.user_id
+		JOIN user_profile p ON p.user_id = u.id
+		WHERE ca.card_id=?
+		ORDER BY u.username
+	`, cardID)
+	return users, err
+}
+
 func (s *CardService) attachLabelsByBoard(cards []*Card, boardID int64) error {
 	if len(cards) == 0 {
 		return nil
@@ -650,6 +745,57 @@ func (s *CardService) attachLabelsByBoard(cards []*Card, boardID int64) error {
 			Color:           row.Color,
 			CreatedAt:       row.CreatedAt,
 			TextClass:       labelTextClass(row.Color),
+		})
+	}
+	return nil
+}
+
+func (s *CardService) attachAssignees(cards []*Card) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	query := `SELECT ca.card_id, u.id, u.username, p.email, p.role, p.profile_image_uri, p.created_at, p.last_login_at
+		FROM card_assignee ca
+		JOIN user u ON u.id = ca.user_id
+		JOIN user_profile p ON p.user_id = u.id
+		WHERE ca.card_id IN (?) ORDER BY u.username`
+	ids := make([]int64, 0, len(cards))
+	byCard := make(map[int64]*Card, len(cards))
+	for _, card := range cards {
+		ids = append(ids, card.ID)
+		byCard[card.ID] = card
+	}
+	query, args, err := sqlx.In(query, ids)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		CardID          int64      `db:"card_id"`
+		ID              int64      `db:"id"`
+		Username        string     `db:"username"`
+		Email           string     `db:"email"`
+		Role            string     `db:"role"`
+		ProfileImageURI string     `db:"profile_image_uri"`
+		CreatedAt       time.Time  `db:"created_at"`
+		LastLoginAt     *time.Time `db:"last_login_at"`
+	}
+	var rows []row
+	if err := s.db.Select(&rows, query, args...); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		card := byCard[r.CardID]
+		if card == nil {
+			continue
+		}
+		card.Assignees = append(card.Assignees, &gauth.User{
+			ID:              r.ID,
+			Username:        r.Username,
+			Email:           r.Email,
+			Role:            r.Role,
+			ProfileImageURI: r.ProfileImageURI,
+			CreatedAt:       r.CreatedAt,
+			LastLoginAt:     r.LastLoginAt,
 		})
 	}
 	return nil

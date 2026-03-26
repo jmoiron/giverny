@@ -3,6 +3,7 @@ package kanban
 import (
 	"time"
 
+	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/monet/db/monarch"
 )
 
@@ -45,13 +46,29 @@ type Card struct {
 	ContentRendered string     `db:"content_rendered"`
 	Position        int        `db:"position"`
 	Color           string     `db:"color"`
-	AssigneeID      *int64     `db:"assignee_id"`
+	StartDate       *time.Time `db:"start_date"`
 	DueDate         *time.Time `db:"due_date"`
 	ArchivedAt      *time.Time `db:"archived_at"`
 	CreatedBy       int64      `db:"created_by"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
 	Labels          []*Label   `db:"-"`
+	Assignees       []*gauth.User `db:"-"`
+}
+
+type CardSubscription struct {
+	CardID    int64     `db:"card_id"`
+	UserID    int64     `db:"user_id"`
+	CreatedAt time.Time `db:"created_at"`
+}
+
+type SubscriptionMessage struct {
+	ID        int64      `db:"id"`
+	CardID    int64      `db:"card_id"`
+	UserID    int64      `db:"user_id"`
+	Message   string     `db:"message"`
+	ReadAt    *time.Time `db:"read_at"`
+	CreatedAt time.Time  `db:"created_at"`
 }
 
 type Label struct {
@@ -193,6 +210,59 @@ var CardMigrations = monarch.Set{
 		{
 			Up:   `ALTER TABLE card ADD COLUMN color TEXT NOT NULL DEFAULT '';`,
 			Down: ``,
+		},
+		{
+			Up:   `ALTER TABLE card ADD COLUMN start_date DATETIME;`,
+			Down: ``,
+		},
+	},
+}
+
+var CardAssigneeMigrations = monarch.Set{
+	Name: "card_assignee",
+	Migrations: []monarch.Migration{
+		{
+			Up: `CREATE TABLE IF NOT EXISTS card_assignee (
+				card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+				user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+				created_at DATETIME DEFAULT (datetime('now')),
+				PRIMARY KEY (card_id, user_id)
+			);
+			INSERT OR IGNORE INTO card_assignee (card_id, user_id)
+			SELECT id, assignee_id FROM card WHERE assignee_id IS NOT NULL;`,
+			Down: `DROP TABLE card_assignee;`,
+		},
+		{
+			Up:   `ALTER TABLE card DROP COLUMN assignee_id;`,
+			Down: `SELECT 1;`,
+		},
+	},
+}
+
+var SubscriptionMigrations = monarch.Set{
+	Name: "card_subscription",
+	Migrations: []monarch.Migration{
+		{
+			Up: `CREATE TABLE IF NOT EXISTS card_subscription (
+				card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+				user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+				created_at DATETIME DEFAULT (datetime('now')),
+				PRIMARY KEY (card_id, user_id)
+			);`,
+			Down: `DROP TABLE card_subscription;`,
+		},
+		{
+			Up: `CREATE TABLE IF NOT EXISTS subscription_message (
+				id INTEGER NOT NULL PRIMARY KEY,
+				card_id INTEGER NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+				user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+				message TEXT NOT NULL,
+				read_at DATETIME,
+				created_at DATETIME DEFAULT (datetime('now'))
+			);
+			CREATE INDEX IF NOT EXISTS idx_subscription_message_user_id ON subscription_message(user_id, created_at DESC);`,
+			Down: `DROP INDEX IF EXISTS idx_subscription_message_user_id;
+DROP TABLE subscription_message;`,
 		},
 	},
 }

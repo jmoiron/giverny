@@ -78,6 +78,62 @@
     padding: 1.5rem 1rem;
 }
 
+.admin-wrap form:not(.invite-form):not(.role-form) .settings-checkbox input[type=checkbox] {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+}
+
+.settings-upload-modal {
+    max-width: 620px;
+    width: min(94vw, 620px);
+    position: relative;
+    padding-top: 2.5rem;
+}
+
+.settings-upload-dropzone {
+    width: 100%;
+    box-sizing: border-box;
+    border: 3px dashed color-mix(in srgb, var(--accent) 78%, var(--border) 22%);
+    border-radius: 12px;
+    min-height: 320px;
+    padding: 2.4rem 1.4rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface) 90%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+    cursor: pointer;
+    margin-bottom: 1rem;
+
+    &.is-dragging {
+        background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+    }
+}
+
+.settings-upload-dropzone-title {
+    font-weight: 600;
+    margin-bottom: 0.45rem;
+    font-size: 1.12rem;
+}
+
+.settings-upload-dropzone-hint,
+.settings-upload-status {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+#avatar-upload-input {
+    width: 100%;
+}
+
+.settings-upload-status.is-error {
+    color: var(--red);
+}
+
 .admin-table {
     width: 100%;
     border-collapse: collapse;
@@ -104,5 +160,142 @@
 
     .label-create-form {
         input[type=text] { width: 220px; }
+    }
+}
+
+.user-settings {
+    .settings-flash {
+        margin: 0 0 1rem;
+        min-height: 1.15rem;
+        padding: 0.7rem 0.85rem;
+        border-radius: 6px;
+        background: var(--hover-bg);
+
+        &.error {
+            background: color-mix(in srgb, var(--red) 16%, var(--surface) 84%);
+            color: var(--red);
+        }
+    }
+
+    .settings-profile-block {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .settings-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: 0 0 auto;
+    }
+
+    .settings-profile-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+    }
+
+    .settings-email {
+        font-size: 1.02rem;
+        color: var(--text);
+    }
+
+    .settings-inline-row {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+    }
+
+    .settings-icon-btn {
+        padding: 0.5rem 0.7rem;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .settings-inline-row > input,
+    .settings-inline-row > select {
+        flex: 1 1 auto;
+    }
+
+    .settings-checkbox-row {
+        grid-column: 2;
+        display: block;
+    }
+
+    .settings-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: var(--text);
+        justify-self: flex-start;
+
+        input {
+            margin: 0;
+            flex: 0 0 auto;
+            width: auto;
+        }
+
+        span {
+            flex: 0 1 auto;
+        }
+    }
+
+    .settings-label-spacer {
+        display: block;
+        min-height: 1px;
+    }
+
+    .settings-upload-modal {
+        max-width: 620px;
+        width: min(94vw, 620px);
+        position: relative;
+        padding-top: 2.5rem;
+    }
+
+    .settings-upload-dropzone {
+        width: 100%;
+        box-sizing: border-box;
+        border: 3px dashed color-mix(in srgb, var(--accent) 78%, var(--border) 22%);
+        border-radius: 12px;
+        min-height: 320px;
+        padding: 2.4rem 1.4rem;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--accent) 10%, var(--surface) 90%);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+        cursor: pointer;
+        margin-bottom: 1rem;
+
+        &.is-dragging {
+            background: color-mix(in srgb, var(--accent) 16%, var(--surface) 84%);
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+        }
+    }
+
+    .settings-upload-dropzone-title {
+        font-weight: 600;
+        margin-bottom: 0.45rem;
+        font-size: 1.12rem;
+    }
+
+    .settings-upload-dropzone-hint,
+    .settings-upload-status {
+        color: var(--muted);
+        font-size: 0.9rem;
+    }
+
+    #avatar-upload-input {
+        width: 100%;
+    }
+
+    .settings-upload-status.is-error {
+        color: var(--red);
     }
 }

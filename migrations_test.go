@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/giverny/kanban"
 	"github.com/jmoiron/monet/auth"
 	"github.com/jmoiron/monet/conf"
+	"github.com/jmoiron/monet/pkg/vfs"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -24,7 +25,10 @@ func TestMigrationsUpDown(t *testing.T) {
 		t.Fatalf("monet auth migrate: %v", err)
 	}
 
-	gauthApp := gauth.NewApp(db, "http://localhost:7100")
+	fss := vfs.NewRegistry(vfs.NewURLMapper(map[string]string{
+		"avatars": "/media/avatars",
+	}))
+	gauthApp := gauth.NewApp(db, "http://localhost:7100", fss)
 	if err := gauthApp.Migrate(); err != nil {
 		t.Fatalf("giverny auth migrate: %v", err)
 	}

@@ -21,6 +21,8 @@ type UserProfile struct {
 	Email           string     `db:"email"`
 	Role            string     `db:"role"`
 	ProfileImageURI string     `db:"profile_image_uri"`
+	Timezone        string     `db:"timezone"`
+	AutoAssignCards bool       `db:"auto_assign_cards"`
 	CreatedAt       time.Time  `db:"created_at"`
 	LastLoginAt     *time.Time `db:"last_login_at"`
 }
@@ -52,6 +54,14 @@ var UserProfileMigrations = monarch.Set{
 		{
 			Up:   `ALTER TABLE user_profile ADD COLUMN profile_image_uri TEXT NOT NULL DEFAULT '';`,
 			Down: `SELECT 1;`, // SQLite does not support DROP COLUMN in older versions
+		},
+		{
+			Up:   `ALTER TABLE user_profile ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC';`,
+			Down: `SELECT 1;`,
+		},
+		{
+			Up:   `ALTER TABLE user_profile ADD COLUMN auto_assign_cards BOOLEAN NOT NULL DEFAULT 0;`,
+			Down: `SELECT 1;`,
 		},
 	},
 }

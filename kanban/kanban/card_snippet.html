@@ -1,4 +1,4 @@
-<div class="kanban-card" data-id="{{.card.ID}}" draggable="true">
+<div class="kanban-card{{if .card.Color}} has-card-color{{end}}" data-id="{{.card.ID}}" draggable="true" data-card-color="{{.card.Color}}"{{if .card.Color}} style="--card-color: {{.card.Color}}"{{end}}>
     <div class="card-title">{{.card.Title}}</div>
     {{if .card.Labels}}
     <div class="card-labels">

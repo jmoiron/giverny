@@ -1,0 +1,68 @@
+<div class="admin-wrap user-settings">
+    <p class="settings-flash error" id="settings-status"{{if not .error}} hidden{{end}}>
+        {{.error}}
+    </p>
+
+    <form method="post" action="/user/settings/" id="user-settings-form">
+        <div>
+            <span class="settings-label-spacer" aria-hidden="true"></span>
+            <div class="settings-profile-block">
+                {{if .user.ProfileImageURI}}
+                <img class="settings-avatar" id="settings-avatar-preview" src="{{.user.ProfileImageURI}}" alt="">
+                {{else}}
+                <span class="settings-avatar avatar-fallback" id="settings-avatar-preview"></span>
+                {{end}}
+                <div class="settings-profile-meta">
+                    <div class="settings-email">{{.user.Email}}</div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <label for="profile-image-uri">avatar url</label>
+            <div class="settings-inline-row">
+                <input type="text" name="profile_image_uri" id="profile-image-uri" value="{{.user.ProfileImageURI}}" placeholder="https://example.com/avatar.jpg">
+                <button type="button" class="settings-icon-btn" id="avatar-url-save" title="save avatar url" aria-label="save avatar url">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                </button>
+                <button type="button" class="settings-upload-btn" id="avatar-upload-open">upload</button>
+            </div>
+        </div>
+
+        <div>
+            <label for="timezone-select">timezone</label>
+            <div class="settings-inline-row">
+                <select name="timezone" id="timezone-select">
+                    {{range .timezones}}
+                    <option value="{{.Value}}"{{if eq .Value $.user.Timezone}} selected{{end}}>{{.Label}}</option>
+                    {{end}}
+                </select>
+                <button type="button" class="settings-detect-btn" id="timezone-autodetect">autodetect</button>
+            </div>
+        </div>
+
+        <div>
+            <span class="settings-label-spacer" aria-hidden="true"></span>
+            <div class="settings-checkbox-row">
+                <label class="settings-checkbox">
+                    <input type="checkbox" name="auto_assign_cards" id="auto-assign-cards"{{if .user.AutoAssignCards}} checked{{end}}>
+                    <span>assign cards I create to me automatically</span>
+                </label>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="modal-overlay" id="avatar-upload-modal">
+    <div class="modal settings-upload-modal">
+        <a href="#" class="modal-close" id="avatar-upload-close" aria-label="close">
+            <i class="fa-solid fa-xmark"></i>
+        </a>
+        <div class="settings-upload-dropzone" id="avatar-upload-dropzone" tabindex="0">
+            <div class="settings-upload-dropzone-title">drag &amp; drop an image here</div>
+            <div class="settings-upload-dropzone-hint">or choose a file below</div>
+        </div>
+        <input type="file" id="avatar-upload-input" accept="image/*">
+        <p class="settings-upload-status" id="avatar-upload-status"></p>
+    </div>
+</div>

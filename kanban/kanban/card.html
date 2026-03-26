@@ -10,6 +10,17 @@
                     warning: card information has been modified elsewhere
                 </div>
                 <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
+                <div class="card-assignees{{if not .card.Assignees}} is-empty{{end}}" id="card-assignees">
+                    {{range .card.Assignees}}
+                    <span class="card-assignee-pill" data-user-id="{{.ID}}">
+                        {{if .ProfileImageURI}}<img class="card-assignee-avatar" src="{{.ProfileImageURI}}" alt="">{{end}}
+                        <span class="card-assignee-name">{{.Username}}</span>
+                        <a href="#" class="card-assignee-remove" aria-label="remove {{.Username}}">
+                            <i class="fa-solid fa-xmark"></i>
+                        </a>
+                    </span>
+                    {{end}}
+                </div>
 
                 <div class="card-section">
                     <div class="card-section-label">labels</div>
@@ -64,12 +75,42 @@
 
             <aside class="card-quick-pane">
                 <div class="quick-controls-title">quick controls</div>
-                <button type="button" class="quick-control-btn"><i class="fa-solid fa-check"></i><span>mark as done</span></button>
-                <button type="button" class="quick-control-btn"><i class="fa-solid fa-bell"></i><span>subscribe</span></button>
-                <button type="button" class="quick-control-btn quick-color-btn" data-card-color="{{.card.Color}}">
+                <button type="button" class="quick-control-btn{{if .isDone}} is-active done-btn{{end}}" id="card-done-btn" data-card-id="{{.card.ID}}" data-done="{{if .isDone}}1{{else}}0{{end}}">
+                    <i class="fa-solid fa-check"></i><span>{{if .isDone}}done{{else}}mark as done{{end}}</span>
+                </button>
+                <button type="button" class="quick-control-btn{{if .isSubscribed}} is-active subscribed-btn{{end}}" id="card-subscribe-btn" data-card-id="{{.card.ID}}" data-subscribed="{{if .isSubscribed}}1{{else}}0{{end}}">
+                    <i class="fa-solid fa-bell"></i><span>{{if .isSubscribed}}subscribed{{else}}subscribe{{end}}</span>
+                </button>
+                <button type="button" class="quick-control-btn quick-panel-trigger quick-color-btn" id="card-color-btn" data-panel="card-color-panel" data-card-color="{{.card.Color}}">
                     <i class="fa-regular fa-square"></i><span>color</span>
                 </button>
-                <button type="button" class="quick-control-btn"><i class="fa-solid fa-user-check"></i><span>assign</span></button>
+                <div class="quick-control-panel color-picker-panel" id="card-color-panel" style="display:none">
+                    <div class="color-swatch-grid">
+                        {{range .paletteColors}}
+                        <button type="button" class="color-swatch-btn" data-color="{{.}}" style="--swatch-color: {{.}}" title="{{.}}"></button>
+                        {{end}}
+                        <button type="button" class="color-swatch-btn clear-swatch-btn" data-color="" title="clear color">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                        <button type="button" class="color-swatch-btn more-swatch-btn" id="card-color-more-btn" title="custom color">...</button>
+                    </div>
+                    <input type="color" id="card-color-custom" value="{{if .card.Color}}{{.card.Color}}{{else}}#40BFFA{{end}}" style="position:absolute; opacity:0; width:0; height:0; pointer-events:none">
+                </div>
+                <button type="button" class="quick-control-btn quick-panel-trigger" id="card-assign-btn" data-panel="card-assign-panel">
+                    <i class="fa-solid fa-user-check"></i><span>assign</span>
+                </button>
+                <div class="quick-control-panel assign-picker-panel" id="card-assign-panel" style="display:none">
+                    <input type="text" id="card-assignee-input" autocomplete="off" placeholder="find a user">
+                    <div class="assign-suggestions" id="card-assignee-suggestions"></div>
+                    <div id="known-users-data" hidden>
+                        {{range .users}}
+                        <div class="known-user-option"
+                             data-user-id="{{.ID}}"
+                             data-username="{{.Username}}"
+                             data-email="{{.Email}}"></div>
+                        {{end}}
+                    </div>
+                </div>
                 <div class="quick-control-divider"></div>
                 <div class="quick-section-title">dates</div>
                 <div class="quick-date-list">
@@ -79,11 +120,59 @@
                     </div>
                     <div class="quick-date-item">
                         <span class="quick-date-label">updated</span>
-                        <span class="quick-date-value">{{.card.UpdatedAt.Format "15:04 Jan 2"}}</span>
+                        <span class="quick-date-value" id="card-updated-at-display">{{.card.UpdatedAt.Format "15:04 Jan 2"}}</span>
                     </div>
                 </div>
-                <button type="button" class="quick-control-btn"><i class="fa-solid fa-calendar-check"></i><span>due date</span></button>
-                <button type="button" class="quick-control-btn"><i class="fa-solid fa-calendar"></i><span>start date</span></button>
+                <button type="button" class="quick-control-btn quick-panel-trigger" id="card-due-date-btn" data-panel="card-due-date-panel">
+                    <i class="fa-solid fa-calendar-check"></i><span>due date</span>
+                    <span class="quick-control-meta" id="card-due-date-display">{{if .card.DueDate}}{{.card.DueDate.Format "Jan 2, 2006"}}{{else}}unset{{end}}</span>
+                </button>
+                <div class="quick-control-panel date-picker-panel" id="card-due-date-panel" style="display:none" data-field="due">
+                    <div class="date-quick-row">
+                        <button type="button" class="date-quick-btn" data-target="due" data-date="today">
+                            <i class="fa-solid fa-calendar-day"></i>
+                            <span>today</span>
+                        </button>
+                        <button type="button" class="date-quick-btn" data-target="due" data-date="tomorrow">
+                            <i class="fa-solid fa-mountain-sun"></i>
+                            <span>tomorrow</span>
+                        </button>
+                        <button type="button" class="date-quick-btn" data-target="due" data-date="weekend">
+                            <i class="fa-regular fa-handshake"></i>
+                            <span>this weekend</span>
+                        </button>
+                        <button type="button" class="date-quick-btn clear-date-btn" data-target="due" data-date="">
+                            <i class="fa-solid fa-xmark"></i>
+                            <span>clear</span>
+                        </button>
+                    </div>
+                    <input type="date" id="card-due-date-input" value="{{if .card.DueDate}}{{.card.DueDate.Format "2006-01-02"}}{{end}}">
+                </div>
+                <button type="button" class="quick-control-btn quick-panel-trigger" id="card-start-date-btn" data-panel="card-start-date-panel">
+                    <i class="fa-solid fa-calendar"></i><span>start date</span>
+                    <span class="quick-control-meta" id="card-start-date-display">{{if .card.StartDate}}{{.card.StartDate.Format "Jan 2, 2006"}}{{else}}unset{{end}}</span>
+                </button>
+                <div class="quick-control-panel date-picker-panel" id="card-start-date-panel" style="display:none" data-field="start">
+                    <div class="date-quick-row">
+                        <button type="button" class="date-quick-btn" data-target="start" data-date="today">
+                            <i class="fa-solid fa-calendar-day"></i>
+                            <span>today</span>
+                        </button>
+                        <button type="button" class="date-quick-btn" data-target="start" data-date="tomorrow">
+                            <i class="fa-solid fa-mountain-sun"></i>
+                            <span>tomorrow</span>
+                        </button>
+                        <button type="button" class="date-quick-btn" data-target="start" data-date="weekend">
+                            <i class="fa-regular fa-handshake"></i>
+                            <span>this weekend</span>
+                        </button>
+                        <button type="button" class="date-quick-btn clear-date-btn" data-target="start" data-date="">
+                            <i class="fa-solid fa-xmark"></i>
+                            <span>clear</span>
+                        </button>
+                    </div>
+                    <input type="date" id="card-start-date-input" value="{{if .card.StartDate}}{{.card.StartDate.Format "2006-01-02"}}{{end}}">
+                </div>
                 <div class="quick-control-divider"></div>
                 <div class="move-row quick-column-row">
                     <label>column</label>

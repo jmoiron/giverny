@@ -198,6 +198,111 @@ $(function() {
         return labels;
     }
 
+    function getKnownUsers() {
+        var users = [];
+        $('#known-users-data .known-user-option').each(function() {
+            users.push({
+                id: Number($(this).data('user-id')),
+                username: String($(this).data('username') || '').trim(),
+                email: String($(this).data('email') || '').trim()
+            });
+        });
+        return users;
+    }
+
+    function formatCardDateDisplay(value) {
+        if (!value) return 'unset';
+        var parts = String(value).split('-');
+        if (parts.length !== 3) return value;
+        var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function updateCardAccent($scope, color) {
+        var normalized = String(color || '').trim();
+        var $modalInner = $scope.find('.card-modal-inner').first();
+        if ($modalInner.length) {
+            $modalInner.toggleClass('has-card-color', !!normalized);
+            if (normalized) {
+                $modalInner.attr('style', '--card-color: ' + normalized);
+            } else {
+                $modalInner.removeAttr('style');
+            }
+        }
+        var $detail = $scope.find('.card-detail').first();
+        if ($detail.length) {
+            $detail.attr('data-card-color', normalized);
+        }
+        var cardId = $scope.find('#card-detail-form').data('id');
+        var $boardCard = $('.kanban-card[data-id="' + cardId + '"]').first();
+        if ($boardCard.length) {
+            $boardCard.attr('data-card-color', normalized);
+            $boardCard.toggleClass('has-card-color', !!normalized);
+            if (normalized) {
+                $boardCard.attr('style', '--card-color: ' + normalized);
+            } else {
+                $boardCard.removeAttr('style');
+            }
+        }
+    }
+
+    function renderAssigneePills(assignees) {
+        var html = '';
+        (assignees || []).forEach(function(assignee) {
+            html += '<span class="card-assignee-pill" data-user-id="' + assignee.id + '">';
+            if (assignee.profile_image_uri) {
+                html += '<img class="card-assignee-avatar" src="' + $('<div>').text(assignee.profile_image_uri).html() + '" alt="">';
+            }
+            html += '<span class="card-assignee-name">' + $('<div>').text(assignee.username).html() + '</span>' +
+                '<a href="#" class="card-assignee-remove" aria-label="remove ' + $('<div>').text(assignee.username).html() + '">' +
+                '<i class="fa-solid fa-xmark"></i></a></span>';
+        });
+        var $assignees = $('#card-assignees');
+        $assignees.html(html);
+        $assignees.toggleClass('is-empty', !assignees || assignees.length === 0);
+    }
+
+    function applyCardMetaResponse($form, data) {
+        if (!data) return;
+        var cardId = $form.data('id');
+        if (data.html) {
+            $('.kanban-card[data-id="' + cardId + '"]').replaceWith(data.html);
+        }
+        if (typeof data.color !== 'undefined') {
+            var $colorBtn = $form.closest('.card-detail').find('.quick-color-btn').first();
+            $colorBtn.attr('data-card-color', data.color || '');
+            $form.find('input[name=color]').val(data.color || '');
+            $('#card-color-custom').val(data.color || '#40BFFA');
+            updateCardAccent($cardModal, data.color || '');
+            applyCardColorButtonState($cardModal);
+        }
+        if (typeof data.assignees !== 'undefined') {
+            renderAssigneePills(data.assignees || []);
+        }
+        if (typeof data.start_date_value !== 'undefined') {
+            $('#card-start-date-input').val(data.start_date_value || '');
+            $('#card-start-date-display').text(formatCardDateDisplay(data.start_date_value || ''));
+        }
+        if (typeof data.due_date_value !== 'undefined') {
+            $('#card-due-date-input').val(data.due_date_value || '');
+            $('#card-due-date-display').text(formatCardDateDisplay(data.due_date_value || ''));
+        }
+        if (typeof data.updated_at_display !== 'undefined') {
+            $('#card-updated-at-display').text(data.updated_at_display || '');
+        }
+    }
+
+    function applyCardDateUpdated(payload) {
+        if (!payload || !payload.card_id) return;
+        var $form = getActiveCardForm(payload.card_id);
+        if (!$form.length) return;
+        $('#card-start-date-input').val(payload.start_date_value || '');
+        $('#card-start-date-display').text(formatCardDateDisplay(payload.start_date_value || ''));
+        $('#card-due-date-input').val(payload.due_date_value || '');
+        $('#card-due-date-display').text(formatCardDateDisplay(payload.due_date_value || ''));
+        $('#card-updated-at-display').text(payload.updated_at_display || '');
+    }
+
     function findKnownLabelByTitle(title) {
         var normalized = normalizeLabelTitle(title);
         if (!normalized) return null;
@@ -502,6 +607,30 @@ $(function() {
         showCardEditWarning($form);
     }
 
+    function applyCardColorChanged(payload) {
+        if (!payload || !payload.card_id) return;
+        var cardId = payload.card_id;
+        var color = payload.color || '';
+        var $boardCard = $('.kanban-card[data-id="' + cardId + '"]').first();
+        if ($boardCard.length) {
+            $boardCard.attr('data-card-color', color);
+            $boardCard.toggleClass('has-card-color', !!color);
+            if (color) {
+                $boardCard.attr('style', '--card-color: ' + color);
+            } else {
+                $boardCard.removeAttr('style');
+            }
+        }
+        var $form = getActiveCardForm(cardId);
+        if (!$form.length) return;
+        $form.find('input[name=color]').val(color);
+        $('#card-color-custom').val(color || '#40BFFA');
+        var $colorBtn = $form.closest('.card-detail').find('.quick-color-btn').first();
+        $colorBtn.attr('data-card-color', color);
+        updateCardAccent($cardModal, color);
+        applyCardColorButtonState($cardModal);
+    }
+
     function applyCardReordered(payload) {
         if (!payload || !payload.column_id || !payload.card_ids) return;
         reorderCardsInColumn(payload.column_id, payload.card_ids);
@@ -615,6 +744,12 @@ $(function() {
         case 'card.description.modified':
             applyCardDescriptionModified(evt.payload);
             break;
+        case 'card.color.changed':
+            applyCardColorChanged(evt.payload);
+            break;
+        case 'card.date.updated':
+            applyCardDateUpdated(evt.payload);
+            break;
         case 'column.reorder':
             applyColumnReordered(evt.payload);
             break;
@@ -722,6 +857,52 @@ $(function() {
                 attachLabelToEditor(label);
                 refreshLabelSuggestions();
             });
+    }
+
+    function renderAssigneeSuggestions(query) {
+        var users = getKnownUsers();
+        var q = String(query || '').trim().toLowerCase();
+        var assigned = {};
+        $('#card-assignees .card-assignee-pill').each(function() {
+            assigned[String($(this).data('user-id'))] = true;
+        });
+        // TODO: switch this to server-backed user autocomplete if installations grow beyond a small user list.
+        if (q) {
+            users = users.filter(function(user) {
+                return user.username.toLowerCase().indexOf(q) >= 0 || user.email.toLowerCase().indexOf(q) >= 0;
+            });
+        }
+        users = users.filter(function(user) {
+            return !assigned[String(user.id)];
+        });
+        users.sort(function(a, b) { return a.username.localeCompare(b.username); });
+        var html = '';
+        users.forEach(function(user) {
+            html += '<button type="button" class="assign-suggestion" data-user-id="' + user.id + '" data-username="' + $('<div>').text(user.username).html() + '">' +
+                '<span class="assign-suggestion-name">' + $('<div>').text(user.username).html() + '</span>' +
+                '<span class="assign-suggestion-meta">' + $('<div>').text(user.email).html() + '</span>' +
+                '</button>';
+        });
+        $('#card-assignee-suggestions').html(html);
+    }
+
+    function resolvedQuickDate(kind) {
+        var now = new Date();
+        if (kind === 'today') {
+            return now.toISOString().slice(0, 10);
+        }
+        if (kind === 'tomorrow') {
+            now.setDate(now.getDate() + 1);
+            return now.toISOString().slice(0, 10);
+        }
+        if (kind === 'weekend') {
+            var day = now.getDay();
+            var delta = (6 - day + 7) % 7;
+            if (delta === 0) delta = 1;
+            now.setDate(now.getDate() + delta);
+            return now.toISOString().slice(0, 10);
+        }
+        return '';
     }
 
     function addLabelFromInput(cardId) {
@@ -1103,8 +1284,9 @@ $(function() {
             .then(function(r) { return r.text(); })
             .then(function(html) {
                 $cardModal.find('.card-modal-inner').html(html);
-                applyCardColorButtonState($cardModal);
                 var $form = $cardModal.find('#card-detail-form');
+                updateCardAccent($cardModal, $form.closest('.card-detail').data('card-color') || '');
+                applyCardColorButtonState($cardModal);
                 updateSelectedLabelsState();
                 setRemoteCardState(
                     $form,
@@ -1357,6 +1539,150 @@ $(function() {
         if (!$(e.target).closest('#card-label-picker').length) {
             hideLabelSuggestions();
         }
+    });
+
+    $(document).on('click', '.quick-panel-trigger', function(e) {
+        e.preventDefault();
+        var $trigger = $(this);
+        var panelId = $(this).data('panel');
+        if (!panelId) return;
+        var $panel = $('#' + panelId);
+        $('.quick-control-panel').not($panel).hide();
+        $panel.css({
+            top: ($trigger.position().top + $trigger.outerHeight() + 6) + 'px'
+        });
+        $panel.toggle();
+        if (panelId === 'card-assign-panel' && isShown($panel)) {
+            renderAssigneeSuggestions($('#card-assignee-input').val());
+            $('#card-assignee-input').trigger('focus');
+        }
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.quick-panel-trigger, .quick-control-panel').length) {
+            $('.quick-control-panel').hide();
+        }
+    });
+
+    $(document).on('input focus', '#card-assignee-input', function() {
+        renderAssigneeSuggestions($(this).val());
+    });
+
+    $(document).on('click', '.assign-suggestion', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        var userId = $(this).data('user-id');
+        post('/boards/' + board + '/cards/' + cardId + '/assign', {
+            assignee_id: userId
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+                renderAssigneeSuggestions($('#card-assignee-input').val());
+                $('.quick-control-panel').hide();
+            });
+    });
+
+    $(document).on('click', '.card-assignee-remove', function(e) {
+        e.preventDefault();
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        var userId = $(this).closest('.card-assignee-pill').data('user-id');
+        post('/boards/' + board + '/cards/' + cardId + '/assignees/' + userId + '/delete', {})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+                renderAssigneeSuggestions($('#card-assignee-input').val());
+            });
+    });
+
+    $(document).on('click', '.color-swatch-btn[data-color]', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        var color = $(this).data('color') || '';
+        post('/boards/' + board + '/cards/' + cardId + '/color', { color: color })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('click', '#card-color-more-btn', function() {
+        $('#card-color-custom').trigger('click');
+    });
+
+    $(document).on('input change', '#card-color-custom', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/color', { color: $(this).val() })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('click', '#card-done-btn', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/done', {})
+            .then(function(r) { return r.json(); })
+            .then(function(payload) {
+                if (payload && payload.to_column_id) {
+                    applyCardMoved(payload);
+                    $('#card-move-select').val(String(payload.to_column_id));
+                }
+                var $btn = $('#card-done-btn');
+                $btn.addClass('is-active done-btn');
+                $btn.attr('data-done', '1');
+                $btn.find('span').first().text('done');
+            });
+    });
+
+    $(document).on('click', '#card-subscribe-btn', function() {
+        var $btn = $(this);
+        var $form = $btn.closest('#card-detail-form');
+        var cardId = $form.data('id');
+        var next = $btn.attr('data-subscribed') === '1' ? '0' : '1';
+        post('/boards/' + board + '/cards/' + cardId + '/subscribe', { subscribed: next })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var subscribed = !!data.subscribed;
+                $btn.attr('data-subscribed', subscribed ? '1' : '0');
+                $btn.toggleClass('is-active subscribed-btn', subscribed);
+                $btn.find('span').first().text(subscribed ? 'subscribed' : 'subscribe');
+            });
+    });
+
+    $(document).on('click', '.date-quick-btn', function() {
+        var target = $(this).data('target');
+        var value = resolvedQuickDate($(this).data('date'));
+        if (target === 'due') {
+            $('#card-due-date-input').val(value);
+            $('#card-due-date-input').trigger('change');
+        } else {
+            $('#card-start-date-input').val(value);
+            $('#card-start-date-input').trigger('change');
+        }
+    });
+
+    $(document).on('change', '#card-due-date-input', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/due-date', { date: $(this).val() })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('change', '#card-start-date-input', function() {
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/start-date', { date: $(this).val() })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
     });
 
     $(document).on('click', '.label-remove-btn', function(e) {

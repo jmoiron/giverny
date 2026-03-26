@@ -70,6 +70,9 @@
 .fa-copy {
   --fa: "\f0c5";
 }
+.fa-handshake {
+  --fa: "\f2b5";
+}
 .fa-square {
   --fa: "\f0c8";
 }
@@ -92,6 +95,9 @@
 }
 .fa-calendar-check {
   --fa: "\f274";
+}
+.fa-calendar-day {
+  --fa: "\f783";
 }
 .fa-check {
   --fa: "\f00c";
@@ -140,6 +146,9 @@
 }
 .fa-moon {
   --fa: "\f186";
+}
+.fa-mountain-sun {
+  --fa: "\e52f";
 }
 .fa-paperclip {
   --fa: "\f0c6";

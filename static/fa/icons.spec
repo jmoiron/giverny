@@ -35,12 +35,15 @@ fa-solid fa-list-check
 fa-solid fa-comment
 fa-solid fa-paperclip
 fa-solid fa-calendar
+fa-solid fa-calendar-day
 fa-solid fa-calendar-check
+fa-solid fa-mountain-sun
 fa-solid fa-floppy-disk
 fa-solid fa-circle-xmark
 fa-solid fa-plug
 fa-solid fa-plug-circle-bolt
 fa-solid fa-bell
 fa-solid fa-user-check
+fa-regular fa-handshake
 fa-regular fa-copy
 fa-solid fa-trash-can
