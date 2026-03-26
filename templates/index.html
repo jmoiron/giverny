@@ -1,12 +1,11 @@
 <div class="landing">
-{{if .user}}
     <h1 class="hero-title">Giverny</h1>
     <div class="dashboard-sections">
         <section class="dashboard-section boards-wrap">
-            <h2>boards</h2>
-            {{if .recentBoards}}
+            <h2>{{.homeBoardsTitle}}</h2>
+            {{if .homeBoards}}
             <div class="boards-grid">
-                {{range .recentBoards}}
+                {{range .homeBoards}}
                 <div class="board-card-wrap">
                     <span class="visibility-badge board-visibility-badge">{{.Visibility}}</span>
                     <a href="/boards/{{.Slug}}" class="board-card">
@@ -17,10 +16,10 @@
                 {{end}}
             </div>
             {{else}}
-            <p class="empty-state">no boards with cards yet</p>
+            <p class="empty-state">{{.homeBoardsEmpty}}</p>
             {{end}}
         </section>
-
+        {{if .user}}
         <section class="dashboard-section boards-wrap dashboard-cards">
             <h2>cards</h2>
             {{if .recentCards}}
@@ -38,9 +37,8 @@
             <p class="empty-state">no cards yet</p>
             {{end}}
         </section>
+        {{else}}
+        <p class="landing-login-copy">Please <a href="/login/">log in</a> to continue.</p>
+        {{end}}
     </div>
-{{else}}
-    <h1 class="hero-title">Giverny</h1>
-    <p>Please <a href="/login/">log in</a> to continue.</p>
-{{end}}
 </div>

@@ -64,6 +64,10 @@ func (a *App) RecentBoards(limit int, user *gauth.User) ([]*Board, error) {
 	return a.boards.RecentByCardActivity(limit, user != nil && user.IsAdmin())
 }
 
+func (a *App) PublicBoards() ([]*Board, error) {
+	return a.boards.ListPublic()
+}
+
 func (a *App) RecentCards(limit int, user *gauth.User) ([]*DashboardCard, error) {
 	return a.cards.Recent(limit, user != nil && user.IsAdmin())
 }
@@ -121,55 +125,62 @@ func (a *App) Bind(r chi.Router) {
 	})
 
 	r.Route("/boards", func(r chi.Router) {
-		r.Use(gauth.RequireAuth)
-		r.Get("/", a.handleBoardList)
-		r.Post("/", a.handleCreateBoard)
+		r.Group(func(r chi.Router) {
+			r.Use(gauth.RequireAuth)
+			r.Get("/", a.handleBoardList)
+			r.Post("/", a.handleCreateBoard)
+		})
 
 		r.Route("/{slug}", func(r chi.Router) {
 			r.Get("/", a.handleBoardDetail)
 			r.Get("/ws", a.handleWS)
-			r.Get("/edit", a.handleBoardEditForm)
-			r.Post("/edit", a.handleBoardEditSubmit)
-			r.Post("/delete", a.handleDeleteBoard)
 
-			r.Route("/columns", func(r chi.Router) {
-				r.Post("/", a.handleCreateColumn)
-				r.Post("/reorder", a.handleReorderColumns)
-				r.Post("/{colID}/edit", a.handleEditColumn)
-				r.Post("/{colID}/delete", a.handleDeleteColumn)
-			})
+			r.Group(func(r chi.Router) {
+				r.Use(gauth.RequireAuth)
+				r.Use(a.requireBoardWrite)
+				r.Get("/edit", a.handleBoardEditForm)
+				r.Post("/edit", a.handleBoardEditSubmit)
+				r.Post("/delete", a.handleDeleteBoard)
 
-			r.Route("/columns/{colID}/cards", func(r chi.Router) {
-				r.Post("/", a.handleCreateCard)
-				r.Post("/reorder", a.handleReorderCards)
-			})
+				r.Route("/columns", func(r chi.Router) {
+					r.Post("/", a.handleCreateColumn)
+					r.Post("/reorder", a.handleReorderColumns)
+					r.Post("/{colID}/edit", a.handleEditColumn)
+					r.Post("/{colID}/delete", a.handleDeleteColumn)
+				})
 
-			r.Route("/cards/{cardID}", func(r chi.Router) {
-				r.Get("/", a.handleGetCard)
-				r.Post("/", a.handleUpdateCard)
-				r.Post("/done", a.handleMarkDone)
-				r.Post("/subscribe", a.handleToggleSubscription)
-				r.Post("/color", a.handleSetCardColor)
-				r.Post("/assign", a.handleSetCardAssignee)
-				r.Post("/assignees/{userID}/delete", a.handleRemoveCardAssignee)
-				r.Post("/start-date", a.handleSetCardStartDate)
-				r.Post("/due-date", a.handleSetCardDueDate)
-				r.Post("/checklist/items", a.handleAddChecklistItem)
-				r.Post("/checklist/items/{itemID}/done", a.handleSetChecklistItemDone)
-				r.Post("/checklist/items/{itemID}/delete", a.handleDeleteChecklistItem)
-				r.Post("/checklist/reorder", a.handleReorderChecklistItems)
-				r.Post("/checklist/delete", a.handleDeleteChecklist)
-				r.Post("/attachments", a.handleUploadAttachment)
-				r.Post("/attachments/{attachmentID}/rename", a.handleRenameAttachment)
-				r.Post("/attachments/{attachmentID}/delete", a.handleDeleteAttachment)
-				r.Post("/labels", a.handleAddCardLabel)
-				r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
-				r.Post("/move", a.handleMoveCard)
-				r.Post("/archive", a.handleArchiveCard)
-				r.Post("/delete", a.handleDeleteCard)
-				r.Post("/unarchive", a.handleUnarchiveCard)
+				r.Route("/columns/{colID}/cards", func(r chi.Router) {
+					r.Post("/", a.handleCreateCard)
+					r.Post("/reorder", a.handleReorderCards)
+				})
+
+				r.Route("/cards/{cardID}", func(r chi.Router) {
+					r.Get("/", a.handleGetCard)
+					r.Post("/", a.handleUpdateCard)
+					r.Post("/done", a.handleMarkDone)
+					r.Post("/subscribe", a.handleToggleSubscription)
+					r.Post("/color", a.handleSetCardColor)
+					r.Post("/assign", a.handleSetCardAssignee)
+					r.Post("/assignees/{userID}/delete", a.handleRemoveCardAssignee)
+					r.Post("/start-date", a.handleSetCardStartDate)
+					r.Post("/due-date", a.handleSetCardDueDate)
+					r.Post("/checklist/items", a.handleAddChecklistItem)
+					r.Post("/checklist/items/{itemID}/done", a.handleSetChecklistItemDone)
+					r.Post("/checklist/items/{itemID}/delete", a.handleDeleteChecklistItem)
+					r.Post("/checklist/reorder", a.handleReorderChecklistItems)
+					r.Post("/checklist/delete", a.handleDeleteChecklist)
+					r.Post("/attachments", a.handleUploadAttachment)
+					r.Post("/attachments/{attachmentID}/rename", a.handleRenameAttachment)
+					r.Post("/attachments/{attachmentID}/delete", a.handleDeleteAttachment)
+					r.Post("/labels", a.handleAddCardLabel)
+					r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
+					r.Post("/move", a.handleMoveCard)
+					r.Post("/archive", a.handleArchiveCard)
+					r.Post("/delete", a.handleDeleteCard)
+					r.Post("/unarchive", a.handleUnarchiveCard)
+				})
+				r.Post("/cards/archived/delete", a.handleDeleteArchivedCards)
 			})
-			r.Post("/cards/archived/delete", a.handleDeleteArchivedCards)
 		})
 	})
 }
@@ -178,6 +189,16 @@ func (a *App) Bind(r chi.Router) {
 // client with the hub for the given board slug.
 func (a *App) handleWS(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	board, err := a.boards.GetBySlug(slug)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !canViewBoard(board, user) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		slog.Error("websocket accept", "err", err)
@@ -362,14 +383,14 @@ func (a *App) renderCards(r *http.Request, cards []*Card, draggable bool) ([]*Re
 	return rendered, nil
 }
 
-func (a *App) buildRenderedColumns(r *http.Request, cols []*Column, cards []*Card) ([]*ColumnWithRenderedCards, error) {
+func (a *App) buildRenderedColumns(r *http.Request, cols []*Column, cards []*Card, draggable bool) ([]*ColumnWithRenderedCards, error) {
 	cardsByCol := make(map[int64][]*Card)
 	for _, c := range cards {
 		cardsByCol[c.ColumnID] = append(cardsByCol[c.ColumnID], c)
 	}
 	result := make([]*ColumnWithRenderedCards, len(cols))
 	for i, col := range cols {
-		renderedCards, err := a.renderCards(r, cardsByCol[col.ID], true)
+		renderedCards, err := a.renderCards(r, cardsByCol[col.ID], draggable)
 		if err != nil {
 			return nil, err
 		}
@@ -540,6 +561,37 @@ func canViewBoard(board *Board, user *gauth.User) bool {
 	return false
 }
 
+// Board access policy:
+// - superadmins can view and modify every board and can also manage install-wide settings elsewhere
+// - admins can view and modify every board, but not install-wide settings
+// - readonly/normal authenticated users can view public and open boards, and can modify public boards only
+// - anonymous users can view public boards only and cannot modify any board
+func canModifyBoard(board *Board, user *gauth.User) bool {
+	if user == nil {
+		return false
+	}
+	if user.IsAdmin() {
+		return true
+	}
+	return board.Visibility == VisibilityPublic
+}
+
+func (a *App) requireBoardWrite(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := gauth.UserFromContext(r.Context())
+		board, err := a.boards.GetBySlug(chi.URLParam(r, "slug"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if !canModifyBoard(board, user) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // --- Handlers ---
 
 func (a *App) handleBoardList(w http.ResponseWriter, r *http.Request) {
@@ -696,7 +748,8 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	columnsWithCards, err := a.buildRenderedColumns(r, cols, cards)
+	canEdit := canModifyBoard(board, user)
+	columnsWithCards, err := a.buildRenderedColumns(r, cols, cards, canEdit)
 	if err != nil {
 		app.Http500("rendering board cards", w, err)
 		return
@@ -714,7 +767,8 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		"columns":   columnsWithCards,
 		"archived":  renderedArchived,
 		"user":      user,
-		"isAdmin":   user.IsAdmin(),
+		"isAdmin":   user != nil && user.IsAdmin(),
+		"canEdit":   canEdit,
 		"mainClass": "board-main",
 	}); err != nil {
 		app.Http500("rendering board", w, err)

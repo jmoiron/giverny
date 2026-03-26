@@ -4,6 +4,7 @@
         <span class="visibility-badge">{{.board.Visibility}}</span>
         {{if .board.Description}}<span class="board-desc">{{.board.Description}}</span>{{end}}
     </div>
+    {{if .canEdit}}
     <div class="ws-status-box" id="ws-status-box">
         <div class="ws-icon-row" id="ws-icon-row">
             <i class="fa-solid fa-plug ws-indicator" id="ws-indicator"></i>
@@ -12,10 +13,11 @@
             <div class="ws-event-empty">no events yet</div>
         </div>
     </div>
+    {{end}}
     <div class="board-columns">
         {{range .columns}}
         <div class="board-column" data-id="{{.ID}}">
-            <div class="col-header" draggable="true">
+            <div class="col-header"{{if $.canEdit}} draggable="true"{{end}}>
                 <span class="col-name">{{.Name}}</span>
                 {{if .WIPLimit}}<span class="wip-badge">{{.WIPLimit}}</span>{{end}}
                 {{if $.isAdmin}}
@@ -56,6 +58,7 @@
                 {{.HTML}}
                 {{end}}
             </div>
+            {{if $.canEdit}}
             <div class="col-footer">
                 <button class="add-card-btn" data-col="{{.ID}}">
                     <i class="fa-solid fa-plus"></i> add card
@@ -68,8 +71,10 @@
                     </div>
                 </form>
             </div>
+            {{end}}
         </div>
         {{end}}
+        {{if .canEdit}}
         <div class="board-column archived-column is-hidden" id="archived-column">
             <div class="col-header">
                 <i class="fa-solid fa-trash-can archived-column-icon"></i>
@@ -110,9 +115,11 @@
             </form>
         </div>
         {{end}}
+        {{end}}
     </div>
 </div>
 
+{{if .canEdit}}
 <div id="card-modal" class="modal-overlay">
     <div class="modal card-modal-inner">
         <!-- loaded via AJAX -->
@@ -158,3 +165,4 @@
 
 <script src="/static/js/highlight.min.js" defer></script>
 <script src="/static/js/kanban.js" defer></script>
+{{end}}

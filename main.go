@@ -260,6 +260,18 @@ func home(kanbanApp *kanban.App) http.HandlerFunc {
 			}
 			ctx["recentBoards"] = recentBoards
 			ctx["recentCards"] = renderedRecentCards
+			ctx["homeBoards"] = recentBoards
+			ctx["homeBoardsTitle"] = "boards"
+			ctx["homeBoardsEmpty"] = "no boards with cards yet"
+		} else {
+			publicBoards, err := kanbanApp.PublicBoards()
+			if err != nil {
+				app.Http500("loading public boards", w, err)
+				return
+			}
+			ctx["homeBoards"] = publicBoards
+			ctx["homeBoardsTitle"] = "public boards"
+			ctx["homeBoardsEmpty"] = "no public boards yet"
 		}
 		if err := reg.RenderWithBase(w, "base", "templates/index.html", ctx); err != nil {
 			app.Http500("rendering index", w, err)

@@ -171,6 +171,12 @@ func (s *BoardService) List(isAdmin bool) ([]*Board, error) {
 	return boards, err
 }
 
+func (s *BoardService) ListPublic() ([]*Board, error) {
+	var boards []*Board
+	err := s.db.Select(&boards, `SELECT * FROM board WHERE visibility='public' ORDER BY name`)
+	return boards, err
+}
+
 func (s *BoardService) RecentByCardActivity(limit int, isAdmin bool) ([]*Board, error) {
 	var boards []*Board
 	query := `
