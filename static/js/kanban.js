@@ -26,6 +26,9 @@ $(function() {
         draggedEl: null,
         placeholder: null
     };
+    var attachmentDragDepth = 0;
+    var attachmentUploadInFlight = false;
+    var activeAttachmentRenameId = 0;
 
     function post(url, data) {
         var body = data instanceof FormData ? data : new URLSearchParams(data);
@@ -107,6 +110,10 @@ $(function() {
             0.7152 * channelLuminance(g / 255) +
             0.0722 * channelLuminance(b / 255);
         return luminance > 0.58 ? 'fg-dark' : 'fg-light';
+    }
+
+    function attachmentIconClass(mimeType) {
+        return String(mimeType || '').toLowerCase().indexOf('image/') === 0 ? 'fa-solid fa-image' : 'fa-solid fa-file';
     }
 
     function applyCardColorButtonState($scope) {
@@ -339,6 +346,9 @@ $(function() {
         if (typeof data.checklist !== 'undefined') {
             renderChecklist(data.checklist || { items: [], completed_count: 0, total_count: 0, percent_complete: 0 });
         }
+        if (typeof data.attachments !== 'undefined') {
+            renderAttachments(data.attachments || []);
+        }
     }
 
     function applyCardDateUpdated(payload) {
@@ -350,6 +360,18 @@ $(function() {
         $('#card-due-date-input').val(payload.due_date_value || '');
         $('#card-due-date-display').text(formatCardDateDisplay(payload.due_date_value || ''));
         $('#card-updated-at-display').text(formatTimestampDisplay(payload.updated_at_value || ''));
+    }
+
+    function applyCardAttachmentsUpdated(payload) {
+        if (!payload || !payload.card_id) return;
+        var $form = getActiveCardForm(payload.card_id);
+        if (!$form.length) return;
+        renderAttachments(payload.attachments || []);
+        if (typeof payload.updated_at_value !== 'undefined') {
+            $('#card-updated-at-display').text(formatTimestampDisplay(payload.updated_at_value || ''));
+        } else if (typeof payload.updated_at_display !== 'undefined') {
+            $('#card-updated-at-display').text(payload.updated_at_display || '');
+        }
     }
 
     function applyCardChecklistUpdated(payload) {
@@ -426,6 +448,130 @@ $(function() {
         if (!$section.length) return;
         var hidden = $section.hasClass('hide-completed');
         $('#checklist-toggle-completed-btn').text(hidden ? 'show completed' : 'hide completed');
+    }
+
+    function createAttachmentRow(attachment) {
+        var $row = $('<div class="card-attachment-row"></div>');
+        $row.attr('data-attachment-id', attachment.id);
+        $row.attr('data-attachment-url', attachment.filepath || '');
+        var iconClass = attachment.icon_class || attachmentIconClass(attachment.mime_type);
+        $row.append(
+            $('<div class="card-attachment-main"></div>')
+                .append(
+                    $('<a class="card-attachment-link" target="_blank" rel="noopener noreferrer"></a>')
+                        .attr('href', attachment.filepath || '#')
+                        .append($('<i></i>').attr('class', iconClass))
+                        .append($('<span></span>').text(attachment.filename || 'attachment'))
+                )
+                .append(
+                    $('<div class="card-attachment-rename-inline" hidden></div>')
+                        .append($('<i></i>').attr('class', iconClass))
+                        .append($('<input type="text" class="card-attachment-rename-input" aria-label="rename attachment">').val(attachment.filename || 'attachment'))
+                )
+        );
+        $row.append(
+            $('<div class="card-attachment-actions"></div>')
+                .append($('<a href="#" class="card-attachment-rename" aria-label="rename attachment"><i class="fa-solid fa-pen-to-square"></i></a>'))
+                .append($('<a href="#" class="card-attachment-copy" aria-label="copy attachment link"><i class="fa-regular fa-copy"></i></a>'))
+                .append($('<a href="#" class="card-attachment-delete inline-remove-link" aria-label="delete attachment"><i class="fa-solid fa-xmark"></i></a>'))
+        );
+        return $row;
+    }
+
+    function renderAttachments(attachments) {
+        var list = attachments || [];
+        var $section = $('#card-attachments-section');
+        var $list = $('#card-attachments-list');
+        if (!$section.length || !$list.length) return;
+        $list.empty();
+        activeAttachmentRenameId = 0;
+        list.forEach(function(attachment) {
+            $list.append(createAttachmentRow(attachment));
+        });
+        $section.toggleClass('is-empty', list.length === 0);
+        $('#card-attachment-rename-actions').addClass('is-hidden');
+    }
+
+    function resetAttachmentOverlay() {
+        attachmentDragDepth = 0;
+        attachmentUploadInFlight = false;
+        var $overlay = $('#card-upload-overlay');
+        $overlay.removeClass('is-complete').addClass('is-hidden');
+        $('#card-upload-overlay-copy').text('drop files to attach them to this card');
+        $('#card-upload-overlay-name').text('');
+        $('#card-upload-progress').addClass('is-hidden');
+        $('#card-upload-progress-copy').text('0%');
+        $('#card-upload-progress-fill').css('width', '0%');
+    }
+
+    function showAttachmentOverlay(message, name) {
+        $('#card-upload-overlay-copy').text(message || 'drop files to attach them to this card');
+        $('#card-upload-overlay-name').text(name || '');
+        $('#card-upload-progress').addClass('is-hidden');
+        $('#card-upload-overlay').removeClass('is-hidden is-complete');
+    }
+
+    function updateAttachmentOverlayProgress(message, name, percent) {
+        var pct = Math.max(0, Math.min(100, Number(percent || 0)));
+        $('#card-upload-overlay-copy').text(message || 'uploading attachment');
+        $('#card-upload-overlay-name').text(name || '');
+        $('#card-upload-progress').removeClass('is-hidden');
+        $('#card-upload-progress-copy').text(String(pct) + '%');
+        $('#card-upload-progress-fill').css('width', String(pct) + '%');
+        $('#card-upload-overlay').removeClass('is-hidden is-complete');
+    }
+
+    function completeAttachmentOverlay() {
+        var $overlay = $('#card-upload-overlay');
+        $('#card-upload-progress-copy').text('100%');
+        $('#card-upload-progress-fill').css('width', '100%');
+        $overlay.removeClass('is-hidden').addClass('is-complete');
+        setTimeout(resetAttachmentOverlay, 180);
+    }
+
+    function beginAttachmentRename($row) {
+        cancelAttachmentRename($('.card-attachment-row.is-renaming').first());
+        var $inline = $row.find('.card-attachment-rename-inline').first();
+        var $input = $inline.find('.card-attachment-rename-input').first();
+        if (!$inline.length || !$input.length) return;
+        activeAttachmentRenameId = Number($row.data('attachment-id'));
+        $row.addClass('is-renaming');
+        $inline.prop('hidden', false);
+        $('#card-attachment-rename-actions').removeClass('is-hidden');
+        setTimeout(function() {
+            $input.trigger('focus');
+            var input = $input[0];
+            if (input && input.select) input.select();
+        }, 0);
+    }
+
+    function cancelAttachmentRename($row) {
+        if (!$row || !$row.length) {
+            $('#card-attachment-rename-actions').addClass('is-hidden');
+            activeAttachmentRenameId = 0;
+            return;
+        }
+        var $inline = $row.find('.card-attachment-rename-inline').first();
+        var current = $row.find('.card-attachment-link span').first().text();
+        $inline.prop('hidden', true);
+        $inline.find('.card-attachment-rename-input').val(current);
+        $row.removeClass('is-renaming');
+        $('#card-attachment-rename-actions').addClass('is-hidden');
+        activeAttachmentRenameId = 0;
+    }
+
+    function saveAttachmentRename() {
+        var $row = $('.card-attachment-row.is-renaming').first();
+        if (!$row.length) return;
+        var $form = $('#card-detail-form');
+        var cardId = $form.data('id');
+        var filename = $row.find('.card-attachment-rename-input').val().trim();
+        if (!filename) return;
+        post('/boards/' + board + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/rename', { filename: filename })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
     }
 
     function createLabelPill(label) {
@@ -863,6 +1009,9 @@ $(function() {
             break;
         case 'card.date.updated':
             applyCardDateUpdated(evt.payload);
+            break;
+        case 'card.attachments.updated':
+            applyCardAttachmentsUpdated(evt.payload);
             break;
         case 'column.reorder':
             applyColumnReordered(evt.payload);
@@ -1428,12 +1577,14 @@ $(function() {
                 );
                 hideCardEditWarning($form);
                 updateChecklistCompletedVisibility();
+                resetAttachmentOverlay();
                 $cardModal.addClass('active');
             });
     }
 
     function closeCardModal(syncHash) {
         cardModalRequestID++;
+        resetAttachmentOverlay();
         $cardModal.removeClass('active');
         if (syncHash !== false && hashCardID()) {
             history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -1449,7 +1600,92 @@ $(function() {
         closeCardModal(false);
     }
 
+    function uploadCardAttachment(file) {
+        var $form = $('#card-detail-form');
+        if (!$form.length || !file) return;
+        var cardId = $form.data('id');
+        var formData = new FormData();
+        formData.append('file', file);
+        attachmentUploadInFlight = true;
+        updateAttachmentOverlayProgress('uploading attachment', file.name || '', 0);
+        return new Promise(function(resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/boards/' + board + '/cards/' + cardId + '/attachments');
+            xhr.responseType = 'json';
+            xhr.upload.onprogress = function(ev) {
+                if (!ev.lengthComputable) return;
+                updateAttachmentOverlayProgress('uploading attachment', file.name || '', Math.round((ev.loaded / ev.total) * 100));
+            };
+            xhr.onload = function() {
+                attachmentUploadInFlight = false;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    var data = xhr.response;
+                    if (!data && xhr.responseText) data = JSON.parse(xhr.responseText);
+                    applyCardMetaResponse($form, data || {});
+                    $('#card-attachment-input').val('');
+                    completeAttachmentOverlay();
+                    resolve(data);
+                    return;
+                }
+                resetAttachmentOverlay();
+                reject(new Error('attachment upload failed'));
+            };
+            xhr.onerror = function() {
+                attachmentUploadInFlight = false;
+                resetAttachmentOverlay();
+                reject(new Error('attachment upload failed'));
+            };
+            xhr.send(formData);
+        });
+    }
+
+    function uploadCardAttachments(files) {
+        var queue = Array.prototype.slice.call(files || []).filter(Boolean);
+        if (!queue.length) return Promise.resolve();
+        return queue.reduce(function(promise, file) {
+            return promise.then(function() {
+                return uploadCardAttachment(file);
+            });
+        }, Promise.resolve());
+    }
+
     window.addEventListener('hashchange', syncCardModalToHash);
+
+    document.addEventListener('dragover', function(ev) {
+        var dt = ev.dataTransfer;
+        if (!$cardModal.hasClass('active') || !dt || !dt.types) return;
+        if (Array.prototype.indexOf.call(dt.types, 'Files') === -1) return;
+        ev.preventDefault();
+        dt.dropEffect = 'copy';
+    }, true);
+
+    document.addEventListener('dragenter', function(ev) {
+        var dt = ev.dataTransfer;
+        if (!$cardModal.hasClass('active') || !dt || !dt.types) return;
+        if (Array.prototype.indexOf.call(dt.types, 'Files') === -1) return;
+        attachmentDragDepth += 1;
+        if (!attachmentUploadInFlight) {
+            showAttachmentOverlay('drop files to attach them to this card');
+        }
+    }, true);
+
+    document.addEventListener('dragleave', function(ev) {
+        var dt = ev.dataTransfer;
+        if (!$cardModal.hasClass('active') || !dt || !dt.types) return;
+        if (Array.prototype.indexOf.call(dt.types, 'Files') === -1) return;
+        attachmentDragDepth = Math.max(0, attachmentDragDepth - 1);
+        if (attachmentDragDepth === 0 && !attachmentUploadInFlight) {
+            resetAttachmentOverlay();
+        }
+    }, true);
+
+    document.addEventListener('drop', function(ev) {
+        var dt = ev.dataTransfer;
+        if (!$cardModal.hasClass('active') || !dt || !dt.files || !dt.files.length) return;
+        ev.preventDefault();
+        attachmentDragDepth = 0;
+        uploadCardAttachments(dt.files);
+    }, true);
 
     $(document).on('click', '.kanban-card', function() {
         if (shouldSuppressCardClick()) return;
@@ -1788,6 +2024,10 @@ $(function() {
         if (input) input.focus();
     });
 
+    $(document).on('click', '#card-attach-btn', function() {
+        $('#card-attachment-input').trigger('click');
+    });
+
     $(document).on('click', function(e) {
         if (!$(e.target).closest('.quick-panel-trigger, .quick-control-panel').length) {
             $('.quick-control-panel').hide();
@@ -1964,6 +2204,63 @@ $(function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
         post('/boards/' + board + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                applyCardMetaResponse($form, data);
+            });
+    });
+
+    $(document).on('change', '#card-attachment-input', function() {
+        if (this.files && this.files.length) uploadCardAttachments(this.files);
+    });
+
+    $(document).on('click', '.card-attachment-copy', function(e) {
+        e.preventDefault();
+        var url = $(this).closest('.card-attachment-row').find('.card-attachment-link')[0];
+        url = url ? url.href : '';
+        if (!url) return;
+        navigator.clipboard.writeText(url).then(() => {
+            var $icon = $(this).find('i').first();
+            $icon.removeClass('fa-copy').addClass('fa-check');
+            setTimeout(function() {
+                $icon.removeClass('fa-check').addClass('fa-copy');
+            }, 1200);
+        });
+    });
+
+    $(document).on('click', '.card-attachment-rename', function(e) {
+        e.preventDefault();
+        beginAttachmentRename($(this).closest('.card-attachment-row'));
+    });
+
+    $(document).on('click', '.card-attachment-rename-cancel', function(e) {
+        e.preventDefault();
+        cancelAttachmentRename($('.card-attachment-row.is-renaming').first());
+    });
+
+    $(document).on('keydown', '.card-attachment-rename-input', function(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelAttachmentRename($(this).closest('.card-attachment-row'));
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveAttachmentRename();
+        }
+    });
+
+    $(document).on('click', '.card-attachment-rename-save', function(e) {
+        e.preventDefault();
+        saveAttachmentRename();
+    });
+
+    $(document).on('click', '.card-attachment-delete', function(e) {
+        e.preventDefault();
+        var $row = $(this).closest('.card-attachment-row');
+        var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
+        post('/boards/' + board + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);

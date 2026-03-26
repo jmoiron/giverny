@@ -33,7 +33,7 @@ func TestMigrationsUpDown(t *testing.T) {
 		t.Fatalf("giverny auth migrate: %v", err)
 	}
 
-	kanbanApp := kanban.NewApp(db)
+	kanbanApp := kanban.NewApp(db, nil)
 	if err := kanbanApp.Migrate(); err != nil {
 		t.Fatalf("kanban migrate: %v", err)
 	}

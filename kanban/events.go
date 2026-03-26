@@ -19,6 +19,7 @@ const (
 	EventCardTitleModified       = "card.title.modified"
 	EventCardDescriptionModified = "card.description.modified"
 	EventCardChecklistUpdated    = "card.checklist.updated"
+	EventCardAttachmentsUpdated  = "card.attachments.updated"
 	EventCardLabelAdded          = "card.label.added"
 	EventCardLabelRemoved        = "card.label.removed"
 	EventColumnCreated           = "column.created"
@@ -77,6 +78,21 @@ type CardDateUpdatedPayload struct {
 	DueDateValue      string `json:"due_date_value"`
 	UpdatedAtValue    string `json:"updated_at_value"`
 	UpdatedAtDisplay  string `json:"updated_at_display"`
+}
+
+type EventAttachmentPayload struct {
+	ID        int64  `json:"id"`
+	Filename  string `json:"filename"`
+	Filepath  string `json:"filepath"`
+	MimeType  string `json:"mime_type"`
+	IconClass string `json:"icon_class"`
+}
+
+type CardAttachmentsUpdatedPayload struct {
+	CardID           int64                    `json:"card_id"`
+	Attachments      []EventAttachmentPayload `json:"attachments"`
+	UpdatedAtValue   string                   `json:"updated_at_value"`
+	UpdatedAtDisplay string                   `json:"updated_at_display"`
 }
 
 type ChecklistItemPayload struct {

@@ -123,6 +123,13 @@ func finalizeLabels(labels []*Label) {
 	}
 }
 
+func attachmentIconClass(mimeType string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "image/") {
+		return "fa-solid fa-image"
+	}
+	return "fa-solid fa-file"
+}
+
 // BoardService methods
 
 func (s *BoardService) Create(name, slug, description, visibility string, createdBy int64) (*Board, error) {
@@ -368,6 +375,10 @@ func (s *CardService) Get(id int64) (*Card, error) {
 		return &card, err
 	}
 	card.Checklist, err = s.checklistForCard(id)
+	if err != nil {
+		return &card, err
+	}
+	card.Attachments, err = s.attachmentsForCard(id)
 	if err != nil {
 		return &card, err
 	}
@@ -823,6 +834,75 @@ func (s *CardService) DeleteChecklist(cardID int64) error {
 	})
 }
 
+func (s *CardService) AddAttachment(cardID, uploadedBy int64, filename, filepath, mimeType string, size int64) (*Attachment, error) {
+	var attachment Attachment
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(`
+			INSERT INTO attachment (card_id, uploaded_by, filename, filepath, mime_type, size)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, cardID, uploadedBy, filename, filepath, strings.TrimSpace(mimeType), size)
+		if err != nil {
+			return err
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID); err != nil {
+			return err
+		}
+		return tx.Get(&attachment, `SELECT * FROM attachment WHERE id=?`, id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	attachment.IconClass = attachmentIconClass(attachment.MimeType)
+	return &attachment, nil
+}
+
+func (s *CardService) Attachment(cardID, attachmentID int64) (*Attachment, error) {
+	var attachment Attachment
+	if err := s.db.Get(&attachment, `SELECT * FROM attachment WHERE id=? AND card_id=?`, attachmentID, cardID); err != nil {
+		return nil, err
+	}
+	attachment.IconClass = attachmentIconClass(attachment.MimeType)
+	return &attachment, nil
+}
+
+func (s *CardService) DeleteAttachment(cardID, attachmentID int64) error {
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(`DELETE FROM attachment WHERE id=? AND card_id=?`, attachmentID, cardID)
+		if err != nil {
+			return err
+		}
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+}
+
+func (s *CardService) RenameAttachment(cardID, attachmentID int64, filename string) error {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return errors.New("filename is required")
+	}
+	return db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(`UPDATE attachment SET filename=? WHERE id=? AND card_id=?`, filename, attachmentID, cardID)
+		if err != nil {
+			return err
+		}
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = tx.Exec(`UPDATE card SET updated_at=datetime('now') WHERE id=?`, cardID)
+		return err
+	})
+}
+
 func (s *CardService) MoveOverdueToLate(boardID int64, now time.Time) (int64, error) {
 	var moved int64
 	err := db.With(s.db, func(tx *sqlx.Tx) error {
@@ -880,6 +960,22 @@ func (s *CardService) checklistForCard(cardID int64) (*Checklist, error) {
 		return nil, err
 	}
 	return &checklist, nil
+}
+
+func (s *CardService) attachmentsForCard(cardID int64) ([]*Attachment, error) {
+	var attachments []*Attachment
+	if err := s.db.Select(&attachments, `
+		SELECT id, card_id, uploaded_by, filename, filepath, mime_type, size, created_at
+		FROM attachment
+		WHERE card_id=?
+		ORDER BY created_at, id
+	`, cardID); err != nil {
+		return nil, err
+	}
+	for _, attachment := range attachments {
+		attachment.IconClass = attachmentIconClass(attachment.MimeType)
+	}
+	return attachments, nil
 }
 
 func orderedCardIDsTx(tx *sqlx.Tx, columnID, excludeID int64) ([]int64, error) {

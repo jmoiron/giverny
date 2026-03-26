@@ -34,6 +34,8 @@ fa-solid fa-tags
 fa-solid fa-list-check
 fa-solid fa-comment
 fa-solid fa-paperclip
+fa-solid fa-file
+fa-solid fa-image
 fa-solid fa-calendar
 fa-solid fa-calendar-day
 fa-solid fa-calendar-check

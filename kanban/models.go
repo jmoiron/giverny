@@ -55,6 +55,7 @@ type Card struct {
 	Labels          []*Label      `db:"-"`
 	Assignees       []*gauth.User `db:"-"`
 	Checklist       *Checklist    `db:"-"`
+	Attachments     []*Attachment `db:"-"`
 	ChecklistDone   int           `db:"-"`
 	ChecklistTotal  int           `db:"-"`
 	ChecklistPct    int           `db:"-"`
@@ -125,6 +126,7 @@ type Attachment struct {
 	MimeType   string    `db:"mime_type"`
 	Size       int64     `db:"size"`
 	CreatedAt  time.Time `db:"created_at"`
+	IconClass  string    `db:"-"`
 }
 
 type Activity struct {

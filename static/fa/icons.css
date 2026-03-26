@@ -126,6 +126,9 @@
 .fa-envelope {
   --fa: "\f0e0";
 }
+.fa-file {
+  --fa: "\f15b";
+}
 .fa-floppy-disk {
   --fa: "\f0c7";
 }
@@ -137,6 +140,9 @@
 }
 .fa-house {
   --fa: "\f015";
+}
+.fa-image {
+  --fa: "\f03e";
 }
 .fa-list-check {
   --fa: "\f0ae";

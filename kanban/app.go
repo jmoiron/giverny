@@ -3,23 +3,29 @@ package kanban
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	gauth "github.com/jmoiron/giverny/auth"
+	gconf "github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/monet/app"
 	"github.com/jmoiron/monet/db"
 	"github.com/jmoiron/monet/db/monarch"
 	"github.com/jmoiron/monet/mtr"
+	"github.com/jmoiron/monet/pkg/vfs"
 )
 
 //go:embed kanban/*.html
@@ -34,9 +40,10 @@ type App struct {
 	cards   *CardService
 	labels  *LabelService
 	users   *gauth.UserProfileService
+	fss     vfs.Registry
 }
 
-func NewApp(dbh db.DB) *App {
+func NewApp(dbh db.DB, fss vfs.Registry) *App {
 	hub := NewHub()
 	go hub.Run()
 	return &App{
@@ -47,6 +54,7 @@ func NewApp(dbh db.DB) *App {
 		cards:   NewCardService(dbh),
 		labels:  NewLabelService(dbh),
 		users:   gauth.NewUserProfileService(dbh),
+		fss:     fss,
 	}
 }
 
@@ -151,6 +159,9 @@ func (a *App) Bind(r chi.Router) {
 				r.Post("/checklist/items/{itemID}/delete", a.handleDeleteChecklistItem)
 				r.Post("/checklist/reorder", a.handleReorderChecklistItems)
 				r.Post("/checklist/delete", a.handleDeleteChecklist)
+				r.Post("/attachments", a.handleUploadAttachment)
+				r.Post("/attachments/{attachmentID}/rename", a.handleRenameAttachment)
+				r.Post("/attachments/{attachmentID}/delete", a.handleDeleteAttachment)
 				r.Post("/labels", a.handleAddCardLabel)
 				r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
 				r.Post("/move", a.handleMoveCard)
@@ -254,6 +265,41 @@ func parseOptionalDate(s string) (*time.Time, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func sanitizeUploadFilename(name string) string {
+	name = strings.TrimSpace(filepath.Base(name))
+	name = strings.ReplaceAll(name, string(os.PathSeparator), "_")
+	if name == "" || name == "." {
+		return "attachment"
+	}
+	return name
+}
+
+func mimeExtension(contentType string) string {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "application/pdf":
+		return ".pdf"
+	case "text/plain; charset=utf-8", "text/plain":
+		return ".txt"
+	default:
+		return ""
+	}
 }
 
 func userLocation(ctx context.Context) *time.Location {
@@ -386,6 +432,7 @@ func (a *App) cardResponse(r *http.Request, card *Card) map[string]any {
 		"updated_at_value":   card.UpdatedAt.Format(time.RFC3339),
 		"updated_at_display": formatTimestampForUser(r.Context(), card.UpdatedAt),
 		"checklist":          a.cardChecklistPayload(card.ID, card.Checklist),
+		"attachments":        attachmentResponseData(card.Attachments),
 		"html":               html,
 	}
 }
@@ -436,6 +483,49 @@ func (a *App) cardChecklistPayload(cardID int64, checklist *Checklist) CardCheck
 		payload.PercentComplete = int(float64(payload.CompletedCount) / float64(payload.TotalCount) * 100)
 	}
 	return payload
+}
+
+func attachmentResponseData(attachments []*Attachment) []map[string]any {
+	data := make([]map[string]any, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		data = append(data, map[string]any{
+			"id":         attachment.ID,
+			"filename":   attachment.Filename,
+			"filepath":   attachment.Filepath,
+			"mime_type":  attachment.MimeType,
+			"icon_class": attachment.IconClass,
+		})
+	}
+	return data
+}
+
+func attachmentEventPayload(attachments []*Attachment) []EventAttachmentPayload {
+	data := make([]EventAttachmentPayload, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		data = append(data, EventAttachmentPayload{
+			ID:        attachment.ID,
+			Filename:  attachment.Filename,
+			Filepath:  attachment.Filepath,
+			MimeType:  attachment.MimeType,
+			IconClass: attachment.IconClass,
+		})
+	}
+	return data
+}
+
+func (a *App) cardAttachmentsUpdatedPayload(r *http.Request, card *Card) CardAttachmentsUpdatedPayload {
+	return CardAttachmentsUpdatedPayload{
+		CardID:           card.ID,
+		Attachments:      attachmentEventPayload(card.Attachments),
+		UpdatedAtValue:   card.UpdatedAt.Format(time.RFC3339),
+		UpdatedAtDisplay: formatTimestampForUser(r.Context(), card.UpdatedAt),
+	}
 }
 
 func canViewBoard(board *Board, user *gauth.User) bool {
@@ -1437,6 +1527,156 @@ func (a *App) handleDeleteChecklist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+}
+
+func (a *App) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if a.fss == nil {
+		apiErr(w, http.StatusInternalServerError, "attachment storage is not configured")
+		return
+	}
+	uploader, err := a.fss.CreateUploader("attachments")
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "attachment storage is not writable")
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		apiErr(w, http.StatusBadRequest, "failed to parse upload")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 32<<20))
+	if err != nil || len(data) == 0 {
+		apiErr(w, http.StatusBadRequest, "failed to read upload")
+		return
+	}
+	contentType := http.DetectContentType(data[:minInt(len(data), 512)])
+	filename := sanitizeUploadFilename(header.Filename)
+	if ext := strings.ToLower(filepath.Ext(filename)); ext == "" {
+		if guessed := mimeExtension(contentType); guessed != "" {
+			filename += guessed
+		}
+	}
+	storedName := fmt.Sprintf("card-%d-%d%s", cardID, time.Now().UnixNano(), strings.ToLower(filepath.Ext(filename)))
+	basePath, err := a.fss.GetPath("attachments")
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "attachment storage path missing")
+		return
+	}
+	destPath := filepath.Join(basePath, storedName)
+	if err := os.WriteFile(destPath, data, 0o644); err != nil {
+		apiErr(w, http.StatusInternalServerError, "failed to write attachment")
+		return
+	}
+	fileURL := uploader.GetFileURL(storedName)
+	if _, err := a.cards.AddAttachment(cardID, user.ID, filename, fileURL, contentType, int64(len(data))); err != nil {
+		_ = os.Remove(destPath)
+		apiErr(w, http.StatusInternalServerError, "failed to save attachment")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	a.publishBoardEvent(slug, EventCardAttachmentsUpdated, a.cardAttachmentsUpdatedPayload(r, card))
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added an attachment")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	attachmentID, err := parseID(chi.URLParam(r, "attachmentID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid attachment id")
+		return
+	}
+	attachment, err := a.cards.Attachment(cardID, attachmentID)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "attachment not found")
+		return
+	}
+	if err := a.cards.DeleteAttachment(cardID, attachmentID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "delete failed")
+		return
+	}
+	cfg := gconf.ConfigFromContext(r.Context())
+	if a.fss != nil {
+		if basePath, err := a.fss.GetPath("attachments"); err == nil {
+			if prefix := strings.TrimRight(cfg.FSS.URLs["attachments"], "/"); prefix != "" && strings.HasPrefix(attachment.Filepath, prefix+"/") {
+				oldFilename := strings.TrimPrefix(attachment.Filepath, prefix+"/")
+				_ = os.Remove(filepath.Join(basePath, filepath.Base(oldFilename)))
+			}
+		}
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	a.publishBoardEvent(slug, EventCardAttachmentsUpdated, a.cardAttachmentsUpdatedPayload(r, card))
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" removed an attachment")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
+}
+
+func (a *App) handleRenameAttachment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	attachmentID, err := parseID(chi.URLParam(r, "attachmentID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid attachment id")
+		return
+	}
+	filename := sanitizeUploadFilename(r.FormValue("filename"))
+	if filename == "" || filename == "attachment" {
+		filename = strings.TrimSpace(r.FormValue("filename"))
+	}
+	if err := a.cards.RenameAttachment(cardID, attachmentID, filename); err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrInvalid) {
+			apiErr(w, http.StatusBadRequest, "invalid filename")
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			apiErr(w, http.StatusBadRequest, "attachment not found")
+			return
+		}
+		if strings.Contains(err.Error(), "required") {
+			apiErr(w, http.StatusBadRequest, "filename is required")
+			return
+		}
+		apiErr(w, http.StatusInternalServerError, "rename failed")
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading updated card failed")
+		return
+	}
+	a.publishBoardEvent(slug, EventCardAttachmentsUpdated, a.cardAttachmentsUpdatedPayload(r, card))
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" renamed an attachment")
+	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
 }
 
 func (a *App) handleMoveCard(w http.ResponseWriter, r *http.Request) {

@@ -69,10 +69,12 @@ func Default() *Config {
 	c.DatabaseURI = "giverny.db"
 	c.BaseURL = "http://localhost:7100"
 	c.FSS.Paths = map[string]string{
-		"avatars": "./data/avatars",
+		"avatars":     "./data/avatars",
+		"attachments": "./data/attachments",
 	}
 	c.FSS.URLs = map[string]string{
-		"avatars": "/media/avatars",
+		"avatars":     "/media/avatars",
+		"attachments": "/media/attach",
 	}
 	return c
 }

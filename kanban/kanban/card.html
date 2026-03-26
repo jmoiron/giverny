@@ -1,4 +1,16 @@
 <div class="card-detail{{if .card.Color}} has-card-color{{end}}" data-card-id="{{.card.ID}}" data-card-color="{{.card.Color}}">
+    <div class="card-upload-overlay is-hidden" id="card-upload-overlay">
+        <div class="card-upload-overlay-panel">
+            <div class="card-upload-overlay-copy" id="card-upload-overlay-copy">drop files to attach them to this card</div>
+            <div class="card-upload-overlay-name" id="card-upload-overlay-name"></div>
+            <div class="card-upload-progress is-hidden" id="card-upload-progress">
+                <div class="card-upload-progress-copy" id="card-upload-progress-copy">0%</div>
+                <div class="card-upload-progress-bar">
+                    <span class="card-upload-progress-fill" id="card-upload-progress-fill" style="width: 0%;"></span>
+                </div>
+            </div>
+        </div>
+    </div>
     <a href="#" class="modal-close" id="card-modal-close" aria-label="close">
         <i class="fa-solid fa-xmark"></i>
     </a>
@@ -52,6 +64,41 @@
                                  data-description="{{.Description}}"></div>
                             {{end}}
                         </div>
+                    </div>
+                </div>
+
+                <div class="card-section attachments-section{{if not .card.Attachments}} is-empty{{end}}" id="card-attachments-section">
+                    <div class="card-section-label">attachments</div>
+                    <div class="card-attachments-list" id="card-attachments-list">
+                        {{range .card.Attachments}}
+                        <div class="card-attachment-row" data-attachment-id="{{.ID}}" data-attachment-url="{{.Filepath}}">
+                            <div class="card-attachment-main">
+                                <a class="card-attachment-link" href="{{.Filepath}}" target="_blank" rel="noopener noreferrer">
+                                    <i class="{{.IconClass}}"></i>
+                                    <span>{{.Filename}}</span>
+                                </a>
+                                <div class="card-attachment-rename-inline" hidden>
+                                    <i class="{{.IconClass}}"></i>
+                                    <input type="text" class="card-attachment-rename-input" value="{{.Filename}}" aria-label="rename attachment">
+                                </div>
+                            </div>
+                            <div class="card-attachment-actions">
+                                <a href="#" class="card-attachment-rename" aria-label="rename attachment">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </a>
+                                <a href="#" class="card-attachment-copy" aria-label="copy attachment link">
+                                    <i class="fa-regular fa-copy"></i>
+                                </a>
+                                <a href="#" class="card-attachment-delete inline-remove-link" aria-label="delete attachment">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                    <div class="card-attachment-rename-actions is-hidden" id="card-attachment-rename-actions">
+                        <a href="#" class="card-attachment-rename-cancel">cancel</a>
+                        <button type="button" class="card-attachment-rename-save">save</button>
                     </div>
                 </div>
 
@@ -136,6 +183,9 @@
                         {{end}}
                     </div>
                 </div>
+                <button type="button" class="quick-control-btn" id="card-attach-btn">
+                    <i class="fa-solid fa-paperclip"></i><span>attach</span>
+                </button>
                 <button type="button" class="quick-control-btn" id="card-checklist-btn">
                     <i class="fa-solid fa-list-check"></i><span>checklist</span>
                 </button>
@@ -218,5 +268,6 @@
                 {{end}}
             </aside>
         </div>
+        <input type="file" id="card-attachment-input" multiple hidden>
     </form>
 </div>

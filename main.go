@@ -167,7 +167,7 @@ func main() {
 	// smtp app manages email config and sending
 	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
-	kanbanApp := kanban.NewApp(dbh)
+	kanbanApp := kanban.NewApp(dbh, fss)
 
 	// apps is the ordered list of sub-applications. Auth must come first
 	// since other tables reference user(id).

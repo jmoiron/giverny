@@ -660,9 +660,11 @@ body.drag-column .board-columns * {
     .modal.card-modal-inner {
         width: min(96vw, 720px);
         max-width: 720px;
+        max-height: calc(100vh - 6rem);
         position: relative;
         --card-color: var(--surface);
         border-top: 6px solid var(--card-color);
+        overflow-y: auto;
 
         &.has-card-color {
             border-top-color: var(--card-color);
@@ -729,6 +731,7 @@ body.drag-column .board-columns * {
 
 .card-detail {
     .form-inputs();
+    position: relative;
 
     #card-detail-form {
         display: block;
@@ -743,6 +746,88 @@ body.drag-column .board-columns * {
 
     .card-main-pane {
         min-width: 0;
+    }
+
+    .card-upload-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 260;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--surface) 45%, transparent);
+        backdrop-filter: blur(2px);
+        border-radius: 8px;
+        opacity: 1;
+        transition: opacity 0.16s ease;
+
+        &.is-hidden {
+            display: none;
+        }
+
+        &.is-complete {
+            opacity: 0;
+        }
+    }
+
+    .card-upload-overlay-panel {
+        width: min(520px, calc(100% - 2rem));
+        padding: 1.1rem 1.15rem;
+        border: 2px dashed var(--border);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--surface) 84%, var(--hover-bg) 16%);
+        box-shadow: 0 10px 32px rgba(0,0,0,0.18);
+    }
+
+    .card-upload-overlay-copy {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .card-upload-overlay-name {
+        margin-top: 0.35rem;
+        font-size: 0.82rem;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .card-upload-progress {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        margin-top: 0.9rem;
+
+        &.is-hidden {
+            display: none;
+        }
+    }
+
+    .card-upload-progress-copy {
+        flex: 0 0 auto;
+        min-width: 3.25rem;
+        font-size: 0.84rem;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .card-upload-progress-bar {
+        flex: 1 1 auto;
+        height: 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface) 62%, var(--border) 38%);
+        overflow: hidden;
+    }
+
+    .card-upload-progress-fill {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, var(--sky), var(--green));
+        border-radius: inherit;
+        transition: width 0.12s ease;
     }
 
     .card-quick-pane {
@@ -1167,6 +1252,162 @@ body.drag-column .board-columns * {
 
         .label-pill {
             pointer-events: none;
+        }
+    }
+
+    .attachments-section {
+        &.is-empty {
+            display: none;
+        }
+    }
+
+    .card-attachments-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+
+    .card-attachment-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.35rem 0.45rem;
+        border-radius: 6px;
+
+        &:hover {
+            background: color-mix(in srgb, var(--surface) 72%, var(--hover-bg) 28%);
+        }
+    }
+
+    .card-attachment-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        color: var(--text);
+        text-decoration: none;
+        flex: 1 1 auto;
+
+        span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        i {
+            color: var(--muted);
+            flex: 0 0 auto;
+        }
+    }
+
+    .card-attachment-main {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .card-attachment-rename-inline {
+        display: none;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
+        width: 100%;
+        flex: 1 1 auto;
+        color: var(--text);
+
+        i {
+            color: var(--muted);
+            flex: 0 0 auto;
+        }
+
+        input {
+            flex: 1 1 auto;
+            min-width: 0;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            color: var(--text);
+            font: inherit;
+            line-height: inherit;
+        }
+    }
+
+    .card-attachment-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+    }
+
+    .card-attachment-row:hover .card-attachment-actions,
+    .card-attachment-row:focus-within .card-attachment-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .card-attachment-copy {
+        color: var(--muted);
+        text-decoration: none;
+        line-height: 1;
+
+        &:hover {
+            color: var(--text);
+        }
+    }
+
+    .card-attachment-rename {
+        color: var(--muted);
+        text-decoration: none;
+        line-height: 1;
+
+        &:hover {
+            color: var(--text);
+        }
+    }
+
+    .card-attachment-delete {
+        font-size: 0.8em;
+    }
+
+    .card-attachment-rename-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.7rem;
+        margin-top: 0.45rem;
+
+        &.is-hidden {
+            display: none;
+        }
+
+        a {
+            color: var(--muted);
+            text-decoration: none;
+
+            &:hover {
+                color: var(--text);
+            }
+        }
+    }
+
+    .card-attachment-row.is-renaming {
+        .card-attachment-link,
+        .card-attachment-actions {
+            display: none;
+        }
+
+        .card-attachment-main {
+            width: 100%;
+        }
+
+        .card-attachment-rename-inline {
+            display: inline-flex;
         }
     }
 
