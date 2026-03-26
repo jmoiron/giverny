@@ -19,7 +19,7 @@
         <script src="/static/js/app.js" defer></script>
         <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
     </head>
-    <body>
+    <body{{if .user}} data-user-timezone="{{.user.Timezone}}"{{end}}>
         <header>
             <nav>
                 <a href="/" class="logo">Giverny</a>

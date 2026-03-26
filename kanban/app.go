@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -238,6 +239,20 @@ func parseOptionalDate(s string) (*time.Time, error) {
 	return &t, nil
 }
 
+func userLocation(ctx context.Context) *time.Location {
+	u := gauth.UserFromContext(ctx)
+	if u != nil && strings.TrimSpace(u.Timezone) != "" {
+		if loc, err := time.LoadLocation(strings.TrimSpace(u.Timezone)); err == nil {
+			return loc
+		}
+	}
+	return time.UTC
+}
+
+func formatTimestampForUser(ctx context.Context, t time.Time) string {
+	return t.In(userLocation(ctx)).Format("15:04 Jan 2")
+}
+
 func (a *App) renderCardSnippet(r *http.Request, card *Card) (string, error) {
 	reg := mtr.RegistryFromContext(r.Context())
 	var buf bytes.Buffer
@@ -283,7 +298,7 @@ func (a *App) cardResponse(r *http.Request, card *Card) map[string]any {
 		"due_date":           card.DueDate,
 		"due_date_value":     dueDateValue,
 		"updated_at_value":   card.UpdatedAt.Format(time.RFC3339),
-		"updated_at_display": card.UpdatedAt.Format("15:04 Jan 2"),
+		"updated_at_display": formatTimestampForUser(r.Context(), card.UpdatedAt),
 		"html":               html,
 	}
 }
@@ -301,7 +316,7 @@ func (a *App) cardDateUpdatedPayload(card *Card) CardDateUpdatedPayload {
 		StartDateValue:   startDateValue,
 		DueDateValue:     dueDateValue,
 		UpdatedAtValue:   card.UpdatedAt.Format(time.RFC3339),
-		UpdatedAtDisplay: card.UpdatedAt.Format("15:04 Jan 2"),
+		UpdatedAtDisplay: "",
 	}
 }
 
@@ -877,6 +892,8 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		"isSubscribed":        subscribed,
 		"isDone":              card.ColumnID == doneCol.ID,
 		"currentUser":         user,
+		"createdAtDisplay":    formatTimestampForUser(r.Context(), card.CreatedAt),
+		"updatedAtDisplay":    formatTimestampForUser(r.Context(), card.UpdatedAt),
 	}); err != nil {
 		slog.Error("rendering card", "err", err)
 	}

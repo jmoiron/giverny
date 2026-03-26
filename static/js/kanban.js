@@ -218,6 +218,43 @@ $(function() {
         return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
+    function userTimeZone() {
+        return (document.body && document.body.dataset && document.body.dataset.userTimezone) ? document.body.dataset.userTimezone : 'UTC';
+    }
+
+    function zonedDateParts(date) {
+        var parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: userTimeZone(),
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(date || new Date());
+        var out = {};
+        parts.forEach(function(part) {
+            if (part.type === 'year' || part.type === 'month' || part.type === 'day') out[part.type] = part.value;
+        });
+        return out;
+    }
+
+    function formatTimestampDisplay(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (isNaN(date.getTime())) return value;
+        var parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: userTimeZone(),
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+            month: 'short',
+            day: 'numeric'
+        }).formatToParts(date);
+        var got = {};
+        parts.forEach(function(part) {
+            if (part.type === 'hour' || part.type === 'minute' || part.type === 'month' || part.type === 'day') got[part.type] = part.value;
+        });
+        return [got.hour + ':' + got.minute, got.month, got.day].join(' ');
+    }
+
     function updateCardAccent($scope, color) {
         var normalized = String(color || '').trim();
         var $modalInner = $scope.find('.card-modal-inner').first();
@@ -290,6 +327,9 @@ $(function() {
         if (typeof data.updated_at_display !== 'undefined') {
             $('#card-updated-at-display').text(data.updated_at_display || '');
         }
+        if (typeof data.updated_at_value !== 'undefined') {
+            $('#card-updated-at-display').text(formatTimestampDisplay(data.updated_at_value || ''));
+        }
     }
 
     function applyCardDateUpdated(payload) {
@@ -300,7 +340,7 @@ $(function() {
         $('#card-start-date-display').text(formatCardDateDisplay(payload.start_date_value || ''));
         $('#card-due-date-input').val(payload.due_date_value || '');
         $('#card-due-date-display').text(formatCardDateDisplay(payload.due_date_value || ''));
-        $('#card-updated-at-display').text(payload.updated_at_display || '');
+        $('#card-updated-at-display').text(formatTimestampDisplay(payload.updated_at_value || ''));
     }
 
     function findKnownLabelByTitle(title) {
@@ -887,20 +927,28 @@ $(function() {
     }
 
     function resolvedQuickDate(kind) {
-        var now = new Date();
+        var parts = zonedDateParts(new Date());
+        var now = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+        function ymd(date) {
+            return [
+                date.getUTCFullYear(),
+                String(date.getUTCMonth() + 1).padStart(2, '0'),
+                String(date.getUTCDate()).padStart(2, '0')
+            ].join('-');
+        }
         if (kind === 'today') {
-            return now.toISOString().slice(0, 10);
+            return ymd(now);
         }
         if (kind === 'tomorrow') {
-            now.setDate(now.getDate() + 1);
-            return now.toISOString().slice(0, 10);
+            now.setUTCDate(now.getUTCDate() + 1);
+            return ymd(now);
         }
         if (kind === 'weekend') {
-            var day = now.getDay();
+            var day = now.getUTCDay();
             var delta = (6 - day + 7) % 7;
             if (delta === 0) delta = 1;
-            now.setDate(now.getDate() + delta);
-            return now.toISOString().slice(0, 10);
+            now.setUTCDate(now.getUTCDate() + delta);
+            return ymd(now);
         }
         return '';
     }

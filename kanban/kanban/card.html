@@ -116,11 +116,11 @@
                 <div class="quick-date-list">
                     <div class="quick-date-item">
                         <span class="quick-date-label">created</span>
-                        <span class="quick-date-value">{{.card.CreatedAt.Format "15:04 Jan 2"}}</span>
+                        <span class="quick-date-value" id="card-created-at-display">{{.createdAtDisplay}}</span>
                     </div>
                     <div class="quick-date-item">
                         <span class="quick-date-label">updated</span>
-                        <span class="quick-date-value" id="card-updated-at-display">{{.card.UpdatedAt.Format "15:04 Jan 2"}}</span>
+                        <span class="quick-date-value" id="card-updated-at-display">{{.updatedAtDisplay}}</span>
                     </div>
                 </div>
                 <button type="button" class="quick-control-btn quick-panel-trigger" id="card-due-date-btn" data-panel="card-due-date-panel">
