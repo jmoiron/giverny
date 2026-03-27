@@ -469,6 +469,10 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
         gap: 0.45rem;
         margin-top: 0.45rem;
 
+        &[hidden] {
+            display: none;
+        }
+
         &.has-card-color {
             .kanban-card-checklist-fill {
                 background: linear-gradient(
@@ -478,6 +482,10 @@ html.dark .ws-indicator.flash { color: var(--orchid); }
                 );
             }
         }
+    }
+
+    .kanban-card-checklist-progress-slot.is-empty {
+        display: none;
     }
 
     .kanban-card-checklist-copy {

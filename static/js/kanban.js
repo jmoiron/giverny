@@ -345,6 +345,7 @@ $(function() {
             $('#card-updated-at-display').text(formatTimestampDisplay(data.updated_at_value || ''));
         }
         if (typeof data.checklist !== 'undefined') {
+            renderBoardChecklistProgress(cardId, data.checklist || { total_count: 0, completed_count: 0, percent_complete: 0 });
             renderChecklist(data.checklist || { items: [], completed_count: 0, total_count: 0, percent_complete: 0 });
         }
         if (typeof data.attachments !== 'undefined') {
@@ -375,8 +376,54 @@ $(function() {
         }
     }
 
+    function renderBoardChecklistProgress(cardId, payload) {
+        if (!cardId) return;
+        var $boardCard = $('.kanban-card[data-id="' + cardId + '"]').first();
+        if (!$boardCard.length) return;
+        var total = payload && payload.total_count || 0;
+        var done = payload && payload.completed_count || 0;
+        var pct = payload && payload.percent_complete || 0;
+        var $slot = $boardCard.find('.kanban-card-checklist-progress-slot').first();
+        if (!$slot.length) {
+            $slot = $('<div class="kanban-card-checklist-progress-slot is-empty"></div>');
+            var $labels = $boardCard.find('.card-labels').first();
+            if ($labels.length) {
+                $labels.before($slot);
+            } else {
+                $boardCard.append($slot);
+            }
+        }
+        var $existing = $slot.find('.kanban-card-checklist-progress').first();
+        if (!total) {
+            $slot.addClass('is-empty');
+            $existing.attr('hidden', 'hidden');
+            return;
+        }
+        if (!$existing.length) {
+            $existing = $(
+                '<div class="kanban-card-checklist-progress">' +
+                    '<span class="kanban-card-checklist-copy"></span>' +
+                    '<span class="kanban-card-checklist-bar">' +
+                        '<span class="kanban-card-checklist-fill"></span>' +
+                    '</span>' +
+                '</div>'
+            );
+            $slot.append($existing);
+        }
+        $slot.removeClass('is-empty');
+        $existing.removeAttr('hidden');
+        $existing.find('.kanban-card-checklist-copy').text(done + '/' + total + ' ' + pct + '%');
+        $existing.find('.kanban-card-checklist-fill').css('width', String(pct) + '%');
+        if ($boardCard.attr('data-card-color')) {
+            $existing.addClass('has-card-color').attr('style', '--card-color: ' + $boardCard.attr('data-card-color'));
+        } else {
+            $existing.removeClass('has-card-color').removeAttr('style');
+        }
+    }
+
     function applyCardChecklistUpdated(payload) {
         if (!payload || !payload.card_id) return;
+        renderBoardChecklistProgress(payload.card_id, payload);
         var $form = getActiveCardForm(payload.card_id);
         if (!$form.length) return;
         renderChecklist(payload);
