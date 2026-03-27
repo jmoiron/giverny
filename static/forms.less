@@ -61,11 +61,34 @@
         &:hover { background: var(--sky); }
     }
 
-    button.btn-cancel,
     button#confirm-cancel {
         background: none;
         border: none;
         color: var(--muted);
+        cursor: pointer;
+        &:hover { background: none; color: var(--text); }
+    }
+}
+
+// Reusable button row: flex layout + consistent cancel/submit styling.
+// Add this class to any row of action buttons alongside a semantic class.
+// Button sizing is left to the surrounding form context (.form-inputs()).
+.btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    width: 100%;
+
+    a.btn-cancel,
+    button.btn-cancel {
+        background: none;
+        border: none;
+        color: var(--muted);
+        text-decoration: none;
+        cursor: pointer;
+        font-family: inherit;
+
         &:hover { background: none; color: var(--text); }
     }
 }

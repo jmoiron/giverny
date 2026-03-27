@@ -1091,6 +1091,15 @@ $(function() {
         case 'label.color.changed':
             applyLabelColorChanged(evt.payload);
             break;
+        case 'card.comment.added':
+            applyCardCommentAdded(evt.payload);
+            break;
+        case 'card.comment.edited':
+            applyCardCommentEdited(evt.payload);
+            break;
+        case 'card.comment.deleted':
+            applyCardCommentDeleted(evt.payload);
+            break;
         }
     }
 
@@ -2361,6 +2370,195 @@ $(function() {
                 });
         });
     });
+
+    // --- Comments ---
+
+    function buildCommentElement(comment, canEdit) {
+        var $c = $('<div class="card-comment"></div>').attr('data-comment-id', comment.comment_id);
+        var $header = $('<div class="card-comment-header"></div>');
+        var $author = $('<div class="card-comment-author"></div>');
+        if (comment.author_image) {
+            $author.append($('<img class="card-comment-avatar" alt="">').attr('src', comment.author_image));
+        }
+        $author.append($('<span class="card-comment-username"></span>').text(comment.author_username));
+        $author.append($('<span class="card-comment-date"></span>').text(comment.created_at_display || ''));
+        $header.append($author);
+        if (canEdit) {
+            var $menuWrap = $('<div class="card-comment-menu-wrap"></div>');
+            var $trigger = $('<a href="#" class="card-comment-menu-trigger" aria-label="comment options"><i class="fa-solid fa-ellipsis-vertical"></i></a>');
+            var $menu = $('<div class="card-comment-menu" hidden></div>');
+            $menu.append($('<button type="button" class="card-comment-edit-start">edit</button>'));
+            $menu.append($('<button type="button" class="card-comment-delete-btn">delete</button>'));
+            $menuWrap.append($trigger).append($menu);
+            $header.append($menuWrap);
+        }
+        $c.append($header);
+        $c.append($('<div class="card-comment-body"></div>').html(comment.body_rendered));
+        if (canEdit) {
+            var $editWrap = $('<div class="card-comment-edit-wrap" hidden></div>');
+            $editWrap.append($('<textarea class="card-comment-edit-area"></textarea>').val(comment.body));
+            var $editActions = $('<div class="add-card-actions btn-row"></div>');
+            $editActions.append($('<a href="#" class="btn-cancel card-comment-edit-cancel">cancel</a>'));
+            $editActions.append($('<button type="button" class="card-comment-edit-save">save</button>'));
+            $editWrap.append($editActions);
+            $c.append($editWrap);
+        }
+        return $c;
+    }
+
+    function cardCanEdit() {
+        return $('#card-detail-form').data('can-edit') == 1;
+    }
+
+    function openCommentForm() {
+        $('#card-comments-section').removeClass('is-empty');
+        $('#card-add-comment-inline-btn').prop('hidden', true);
+        $('#card-comment-form').removeAttr('hidden');
+        $('#card-comment-textarea')[0].focus();
+    }
+
+    function closeCommentForm() {
+        $('#card-comment-form').attr('hidden', true);
+        var hasComments = $('#card-comments-list .card-comment').length > 0;
+        if (hasComments) {
+            $('#card-add-comment-inline-btn').prop('hidden', false);
+        } else {
+            $('#card-comments-section').addClass('is-empty');
+        }
+    }
+
+    // Show comment section + form when comment button clicked (quick control or inline)
+    $(document).on('click', '#card-comment-btn, #card-add-comment-inline-btn', function(e) {
+        e.preventDefault();
+        openCommentForm();
+    });
+
+    // Cancel adding comment
+    $(document).on('click', '#card-comment-cancel', function(e) {
+        e.preventDefault();
+        closeCommentForm();
+    });
+
+    // Submit new comment
+    $(document).on('click', '#card-comment-submit', function() {
+        var $form = $('#card-detail-form');
+        var cardId = $form.data('id');
+        var body = $('#card-comment-textarea').val().trim();
+        if (!body) return;
+        post('/boards/' + board + '/cards/' + cardId + '/comments', { body: body })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) return;
+                $('#card-comment-textarea').val('');
+                if (!$('#card-comments-list .card-comment[data-comment-id="' + data.comment.comment_id + '"]').length) {
+                    $('#card-comments-list').append(buildCommentElement(data.comment, cardCanEdit()));
+                }
+                $('#card-comments-section').removeClass('is-empty');
+                closeCommentForm();
+            });
+    });
+
+    // Toggle comment menu
+    $(document).on('click', '.card-comment-menu-trigger', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $menu = $(this).siblings('.card-comment-menu');
+        var isHidden = $menu.prop('hidden');
+        $('.card-comment-menu').prop('hidden', true);
+        $menu.prop('hidden', !isHidden);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.card-comment-menu-wrap').length) {
+            $('.card-comment-menu').prop('hidden', true);
+        }
+    });
+
+    // Start editing a comment
+    $(document).on('click', '.card-comment-edit-start', function(e) {
+        e.preventDefault();
+        var $comment = $(this).closest('.card-comment');
+        $comment.find('.card-comment-menu').prop('hidden', true);
+        $comment.find('.card-comment-body').hide();
+        var $editWrap = $comment.find('.card-comment-edit-wrap');
+        $editWrap.removeAttr('hidden');
+        $editWrap.find('.card-comment-edit-area')[0].focus();
+    });
+
+    // Cancel editing a comment
+    $(document).on('click', '.card-comment-edit-cancel', function(e) {
+        e.preventDefault();
+        var $comment = $(this).closest('.card-comment');
+        $comment.find('.card-comment-edit-wrap').attr('hidden', true);
+        $comment.find('.card-comment-body').show();
+    });
+
+    // Save edited comment
+    $(document).on('click', '.card-comment-edit-save', function() {
+        var $comment = $(this).closest('.card-comment');
+        var $form = $('#card-detail-form');
+        var cardId = $form.data('id');
+        var commentId = $comment.data('comment-id');
+        var body = $comment.find('.card-comment-edit-area').val().trim();
+        if (!body) return;
+        post('/boards/' + board + '/cards/' + cardId + '/comments/' + commentId + '/edit', { body: body })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) return;
+                $comment.find('.card-comment-body').html(data.comment.body_rendered).show();
+                $comment.find('.card-comment-edit-area').val(data.comment.body);
+                $comment.find('.card-comment-edit-wrap').attr('hidden', true);
+            });
+    });
+
+    // Delete comment
+    $(document).on('click', '.card-comment-delete-btn', function() {
+        var $comment = $(this).closest('.card-comment');
+        var $form = $('#card-detail-form');
+        var cardId = $form.data('id');
+        var commentId = $comment.data('comment-id');
+        $comment.find('.card-comment-menu').prop('hidden', true);
+        window.showConfirmModal('Delete this comment?', function() {
+            post('/boards/' + board + '/cards/' + cardId + '/comments/' + commentId + '/delete', {})
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.ok) return;
+                    $comment.remove();
+                    if ($('#card-comments-list .card-comment').length === 0) {
+                        $('#card-add-comment-inline-btn').prop('hidden', true);
+                        $('#card-comments-section').addClass('is-empty');
+                    }
+                });
+        });
+    });
+
+    // WS: comment added by another client
+    function applyCardCommentAdded(payload) {
+        var $form = $('#card-detail-form');
+        if (!$form.length || Number($form.data('id')) !== Number(payload.card_id)) return;
+        if ($('#card-comments-list .card-comment[data-comment-id="' + payload.comment_id + '"]').length) return;
+        $('#card-comments-list').append(buildCommentElement(payload, cardCanEdit()));
+        $('#card-comments-section').removeClass('is-empty');
+        if ($('#card-comment-form').prop('hidden') !== false) {
+            $('#card-add-comment-inline-btn').prop('hidden', false);
+        }
+    }
+
+    function applyCardCommentEdited(payload) {
+        var $comment = $('#card-comments-list .card-comment[data-comment-id="' + payload.comment_id + '"]');
+        if (!$comment.length) return;
+        $comment.find('.card-comment-body').html(payload.body_rendered).show();
+        $comment.find('.card-comment-edit-area').val(payload.body);
+        $comment.find('.card-comment-edit-wrap').attr('hidden', true);
+    }
+
+    function applyCardCommentDeleted(payload) {
+        $('#card-comments-list .card-comment[data-comment-id="' + payload.comment_id + '"]').remove();
+        if ($('#card-comments-list .card-comment').length === 0) {
+            $('#card-add-comment-inline-btn').prop('hidden', true);
+            $('#card-comments-section').addClass('is-empty');
+        }
+    }
 
     // Save card
     $(document).on('submit', '#card-detail-form', function(e) {

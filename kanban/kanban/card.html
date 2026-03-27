@@ -129,8 +129,8 @@
                     </div>
                     {{if .canEdit}}
                     <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
-                    <div class="card-actions is-hidden">
-                        <a href="#" class="card-cancel-link" id="card-edit-cancel">cancel</a>
+                    <div class="card-actions btn-row is-hidden">
+                        <a href="#" class="btn-cancel" id="card-edit-cancel">cancel</a>
                         <button type="submit">save</button>
                     </div>
                     {{end}}
@@ -162,6 +162,54 @@
                     <div class="checklist-actions-row">
                         <button type="button" class="quick-control-btn checklist-toggle-completed-btn" id="checklist-toggle-completed-btn">hide completed</button>
                         <button type="button" class="quick-control-btn checklist-delete-btn" id="checklist-delete-btn">delete</button>
+                    </div>
+                    {{end}}
+                </div>
+
+                <div class="card-section comments-section{{if not .comments}} is-empty{{end}}" id="card-comments-section">
+                    <div class="card-section-label">comments</div>
+                    <div class="card-comments-list" id="card-comments-list">
+                        {{range .comments}}
+                        <div class="card-comment" data-comment-id="{{.ID}}">
+                            <div class="card-comment-header">
+                                <div class="card-comment-author">
+                                    {{if .AuthorProfileImage}}<img class="card-comment-avatar" src="{{.AuthorProfileImage}}" alt="">{{end}}
+                                    <span class="card-comment-username">{{.AuthorUsername}}</span>
+                                    <span class="card-comment-date">{{.CreatedAtDisplay}}</span>
+                                </div>
+                                {{if $.canEdit}}
+                                <div class="card-comment-menu-wrap">
+                                    <a href="#" class="card-comment-menu-trigger" aria-label="comment options">
+                                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                                    </a>
+                                    <div class="card-comment-menu" hidden>
+                                        <button type="button" class="card-comment-edit-start">edit</button>
+                                        <button type="button" class="card-comment-delete-btn">delete</button>
+                                    </div>
+                                </div>
+                                {{end}}
+                            </div>
+                            <div class="card-comment-body">{{.BodyHTML}}</div>
+                            {{if $.canEdit}}
+                            <div class="card-comment-edit-wrap" hidden>
+                                <textarea class="card-comment-edit-area">{{.Body}}</textarea>
+                                <div class="add-card-actions btn-row">
+                                    <a href="#" class="btn-cancel card-comment-edit-cancel">cancel</a>
+                                    <button type="button" class="card-comment-edit-save">save</button>
+                                </div>
+                            </div>
+                            {{end}}
+                        </div>
+                        {{end}}
+                    </div>
+                    {{if .canEdit}}
+                    <button type="button" class="quick-control-btn" id="card-add-comment-inline-btn"{{if not .comments}} hidden{{end}}>add comment</button>
+                    <div class="card-comment-form" id="card-comment-form" hidden>
+                        <textarea id="card-comment-textarea" placeholder="add a comment (markdown)"></textarea>
+                        <div class="add-card-actions btn-row">
+                            <a href="#" class="btn-cancel" id="card-comment-cancel">cancel</a>
+                            <button type="button" id="card-comment-submit">comment</button>
+                        </div>
                     </div>
                     {{end}}
                 </div>
@@ -211,6 +259,9 @@
                 </button>
                 <button type="button" class="quick-control-btn" id="card-checklist-btn">
                     <i class="fa-solid fa-list-check"></i><span>checklist</span>
+                </button>
+                <button type="button" class="quick-control-btn" id="card-comment-btn">
+                    <i class="fa-solid fa-comments"></i><span>comment</span>
                 </button>
                 <div class="quick-control-divider"></div>
                 {{end}}

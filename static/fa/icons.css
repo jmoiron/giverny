@@ -120,6 +120,9 @@
 .fa-comment {
   --fa: "\f075";
 }
+.fa-comments {
+  --fa: "\f086";
+}
 .fa-ellipsis-vertical {
   --fa: "\f142";
 }

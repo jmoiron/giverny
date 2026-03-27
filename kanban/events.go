@@ -28,6 +28,9 @@ const (
 	EventColumnDeleted           = "column.deleted"
 	EventColumnReordered         = "column.reorder"
 	EventBoardUpdated            = "board.updated"
+	EventCardCommentAdded        = "card.comment.added"
+	EventCardCommentEdited       = "card.comment.edited"
+	EventCardCommentDeleted      = "card.comment.deleted"
 )
 
 // Event is the envelope sent over every WebSocket connection.
@@ -157,4 +160,22 @@ type EventColumnPayload struct {
 
 type ColumnChangedPayload struct {
 	Columns []EventColumnPayload `json:"columns"`
+}
+
+type CardCommentPayload struct {
+	CommentID        int64  `json:"comment_id"`
+	CardID           int64  `json:"card_id"`
+	AuthorID         int64  `json:"author_id"`
+	AuthorUsername   string `json:"author_username"`
+	AuthorImage      string `json:"author_image"`
+	Body             string `json:"body"`
+	BodyRendered     string `json:"body_rendered"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+	CreatedAtDisplay string `json:"created_at_display"`
+}
+
+type CardCommentDeletedPayload struct {
+	CommentID int64 `json:"comment_id"`
+	CardID    int64 `json:"card_id"`
 }

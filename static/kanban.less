@@ -644,12 +644,7 @@ body.drag-column .board-columns * {
 }
 
 .add-card-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.35rem;
-    width: 100%;
-
-    button { padding: 0.3rem 0.75rem; font-size: 0.85rem; }
+    margin-top: 0.35rem;
 }
 
 .add-card-form {
@@ -1476,6 +1471,145 @@ body.drag-column .board-columns * {
         }
     }
 
+    .comments-section {
+        &.is-empty {
+            display: none;
+        }
+    }
+
+    .card-comment {
+        padding: 0.65rem 0;
+        border-bottom: 1px solid var(--border);
+
+        &:last-child {
+            border-bottom: none;
+        }
+    }
+
+    .card-comment-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.45rem;
+    }
+
+    .card-comment-author {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
+    }
+
+    .card-comment-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex: 0 0 auto;
+    }
+
+    .card-comment-username {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .card-comment-date {
+        font-size: 0.78rem;
+        color: var(--muted);
+        white-space: nowrap;
+    }
+
+    .card-comment-menu-wrap {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    .card-comment-menu-trigger {
+        color: var(--muted);
+        text-decoration: none;
+        padding: 0.2rem 0.35rem;
+        border-radius: 4px;
+        line-height: 1;
+
+        &:hover {
+            color: var(--text);
+            background: var(--hover-bg);
+        }
+    }
+
+    .card-comment-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        .card-shadow();
+        z-index: 100;
+        min-width: 100px;
+        overflow: hidden;
+
+        button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.88rem;
+            color: var(--text);
+            cursor: pointer;
+
+            &:hover {
+                background: var(--hover-bg);
+            }
+        }
+    }
+
+    .card-comment-body {
+        font-size: 0.9rem;
+        line-height: 1.55;
+        color: var(--text);
+
+        p { margin: 0 0 0.5rem; &:last-child { margin-bottom: 0; } }
+        code { font-size: 0.85em; background: var(--hover-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+        pre { background: var(--hover-bg); padding: 0.6rem 0.8rem; border-radius: 4px; overflow-x: auto; code { background: none; padding: 0; } }
+    }
+
+    .card-comment-edit-wrap {
+        margin-top: 0.5rem;
+
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        &[hidden] { display: none; }
+    }
+
+    #card-add-comment-inline-btn {
+        margin-top: 0.5rem;
+        width: fit-content;
+        margin-left: auto;
+
+        &[hidden] { display: none; }
+    }
+
+    .card-comment-form {
+        margin-top: 0.75rem;
+
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        &[hidden] { display: none; }
+    }
+
     .hide-completed .checklist-item.is-done {
         display: none;
     }
@@ -1548,10 +1682,6 @@ body.drag-column .board-columns * {
     }
 
     .card-actions {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 0.5rem;
         margin-top: 0.75rem;
 
         &.is-hidden {
@@ -1561,16 +1691,6 @@ body.drag-column .board-columns * {
         .danger-btn {
             background: var(--red);
             &:hover { opacity: 0.85; background: var(--red); }
-        }
-
-        .card-cancel-link {
-            color: var(--muted);
-            text-decoration: none;
-            padding: 0.2rem 0.1rem;
-
-            &:hover {
-                color: var(--text);
-            }
         }
     }
 }

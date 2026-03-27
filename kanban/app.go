@@ -33,29 +33,38 @@ var templates embed.FS
 
 // App is the kanban sub-application.
 type App struct {
-	db      db.DB
-	hub     *Hub
-	boards  *BoardService
-	columns *ColumnService
-	cards   *CardService
-	labels  *LabelService
-	users   *gauth.UserProfileService
-	fss     vfs.Registry
+	db       db.DB
+	hub      *Hub
+	boards   *BoardService
+	columns  *ColumnService
+	cards    *CardService
+	labels   *LabelService
+	comments *CommentService
+	users    *gauth.UserProfileService
+	fss      vfs.Registry
 }
 
 func NewApp(dbh db.DB, fss vfs.Registry) *App {
 	hub := NewHub()
 	go hub.Run()
 	return &App{
-		db:      dbh,
-		hub:     hub,
-		boards:  NewBoardService(dbh),
-		columns: NewColumnService(dbh),
-		cards:   NewCardService(dbh),
-		labels:  NewLabelService(dbh),
-		users:   gauth.NewUserProfileService(dbh),
-		fss:     fss,
+		db:       dbh,
+		hub:      hub,
+		boards:   NewBoardService(dbh),
+		columns:  NewColumnService(dbh),
+		cards:    NewCardService(dbh),
+		labels:   NewLabelService(dbh),
+		comments: NewCommentService(dbh),
+		users:    gauth.NewUserProfileService(dbh),
+		fss:      fss,
 	}
+}
+
+// CommentDisplay wraps CommentWithAuthor with pre-rendered HTML for template use.
+type CommentDisplay struct {
+	*CommentWithAuthor
+	BodyHTML         template.HTML
+	CreatedAtDisplay string
 }
 
 func (a *App) Name() string { return "kanban" }
@@ -180,6 +189,9 @@ func (a *App) Bind(r chi.Router) {
 					r.Post("/attachments/{attachmentID}/delete", a.handleDeleteAttachment)
 					r.Post("/labels", a.handleAddCardLabel)
 					r.Post("/labels/{labelID}/delete", a.handleRemoveCardLabel)
+					r.Post("/comments", a.handleCreateComment)
+					r.Post("/comments/{commentID}/edit", a.handleEditComment)
+					r.Post("/comments/{commentID}/delete", a.handleDeleteComment)
 					r.Post("/move", a.handleMoveCard)
 					r.Post("/archive", a.handleArchiveCard)
 					r.Post("/delete", a.handleDeleteCard)
@@ -1200,6 +1212,20 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rawComments, err := a.comments.ListByCard(card.ID)
+	if err != nil {
+		app.Http500("listing comments", w, err)
+		return
+	}
+	commentDisplays := make([]*CommentDisplay, 0, len(rawComments))
+	for _, c := range rawComments {
+		commentDisplays = append(commentDisplays, &CommentDisplay{
+			CommentWithAuthor: c,
+			BodyHTML:          template.HTML(c.BodyRendered),
+			CreatedAtDisplay:  formatTimestampForUser(r.Context(), c.CreatedAt),
+		})
+	}
+
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.Render(w, "kanban/card.html", mtr.Ctx{
 		"card":                card,
@@ -1216,6 +1242,7 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 		"createdAtDisplay":    formatTimestampForUser(r.Context(), card.CreatedAt),
 		"updatedAtDisplay":    formatTimestampForUser(r.Context(), card.UpdatedAt),
 		"checklist":           a.cardChecklistPayload(card.ID, card.Checklist),
+		"comments":            commentDisplays,
 	}); err != nil {
 		slog.Error("rendering card", "err", err)
 	}
@@ -2014,6 +2041,115 @@ func (a *App) handleRemoveCardLabel(w http.ResponseWriter, r *http.Request) {
 	if label, err := a.labels.Get(labelID); err == nil {
 		_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" removed label "+label.Title)
 	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) commentPayload(r *http.Request, c *CommentWithAuthor) CardCommentPayload {
+	return CardCommentPayload{
+		CommentID:        c.ID,
+		CardID:           c.CardID,
+		AuthorID:         c.AuthorID,
+		AuthorUsername:   c.AuthorUsername,
+		AuthorImage:      c.AuthorProfileImage,
+		Body:             c.Body,
+		BodyRendered:     c.BodyRendered,
+		CreatedAt:        c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:        c.UpdatedAt.Format(time.RFC3339),
+		CreatedAtDisplay: formatTimestampForUser(r.Context(), c.CreatedAt),
+	}
+}
+
+func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		apiErr(w, http.StatusBadRequest, "body is required")
+		return
+	}
+	comment, err := a.comments.Create(cardID, user.ID, body)
+	if err != nil {
+		app.Http500("creating comment", w, err)
+		return
+	}
+	payload := a.commentPayload(r, comment)
+	a.publishBoardEvent(slug, EventCardCommentAdded, payload)
+	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added a comment")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "comment": payload})
+}
+
+func (a *App) handleEditComment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	commentID, err := parseID(chi.URLParam(r, "commentID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid comment id")
+		return
+	}
+	existing, err := a.comments.Get(commentID)
+	if err != nil || existing.CardID != cardID {
+		http.NotFound(w, r)
+		return
+	}
+	if existing.AuthorID != user.ID && !user.IsAdmin() {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	body := strings.TrimSpace(r.FormValue("body"))
+	if body == "" {
+		apiErr(w, http.StatusBadRequest, "body is required")
+		return
+	}
+	comment, err := a.comments.Update(commentID, body)
+	if err != nil {
+		app.Http500("updating comment", w, err)
+		return
+	}
+	payload := a.commentPayload(r, comment)
+	a.publishBoardEvent(slug, EventCardCommentEdited, payload)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "comment": payload})
+}
+
+func (a *App) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	commentID, err := parseID(chi.URLParam(r, "commentID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid comment id")
+		return
+	}
+	existing, err := a.comments.Get(commentID)
+	if err != nil || existing.CardID != cardID {
+		http.NotFound(w, r)
+		return
+	}
+	if existing.AuthorID != user.ID && !user.IsAdmin() {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if err := a.comments.Delete(commentID); err != nil {
+		app.Http500("deleting comment", w, err)
+		return
+	}
+	a.publishBoardEvent(slug, EventCardCommentDeleted, CardCommentDeletedPayload{
+		CommentID: commentID,
+		CardID:    cardID,
+	})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

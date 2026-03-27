@@ -31,11 +31,19 @@ type BoardService struct{ db db.DB }
 type ColumnService struct{ db db.DB }
 type CardService struct{ db db.DB }
 type LabelService struct{ db db.DB }
+type CommentService struct{ db db.DB }
 
-func NewBoardService(dbh db.DB) *BoardService   { return &BoardService{db: dbh} }
-func NewColumnService(dbh db.DB) *ColumnService { return &ColumnService{db: dbh} }
-func NewCardService(dbh db.DB) *CardService     { return &CardService{db: dbh} }
-func NewLabelService(dbh db.DB) *LabelService   { return &LabelService{db: dbh} }
+func NewBoardService(dbh db.DB) *BoardService     { return &BoardService{db: dbh} }
+func NewColumnService(dbh db.DB) *ColumnService   { return &ColumnService{db: dbh} }
+func NewCardService(dbh db.DB) *CardService       { return &CardService{db: dbh} }
+func NewLabelService(dbh db.DB) *LabelService     { return &LabelService{db: dbh} }
+func NewCommentService(dbh db.DB) *CommentService { return &CommentService{db: dbh} }
+
+type CommentWithAuthor struct {
+	Comment
+	AuthorUsername     string `db:"author_username"`
+	AuthorProfileImage string `db:"author_profile_image_uri"`
+}
 
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9]+`)
 
@@ -1366,6 +1374,66 @@ func (s *LabelService) UpdateColor(id int64, color string) error {
 
 func (s *LabelService) Delete(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM label WHERE id=?`, id)
+	return err
+}
+
+// CommentService methods
+
+func (s *CommentService) commentQuery() string {
+	return `SELECT c.*, u.username AS author_username, p.profile_image_uri AS author_profile_image_uri
+		FROM comment c
+		JOIN user u ON u.id = c.author_id
+		LEFT JOIN user_profile p ON p.user_id = c.author_id`
+}
+
+func (s *CommentService) Create(cardID, authorID int64, body string) (*CommentWithAuthor, error) {
+	rendered := mtr.RenderMarkdown(body)
+	var c CommentWithAuthor
+	err := db.With(s.db, func(tx *sqlx.Tx) error {
+		res, err := tx.Exec(
+			`INSERT INTO comment (card_id, author_id, body, body_rendered) VALUES (?, ?, ?, ?)`,
+			cardID, authorID, body, rendered,
+		)
+		if err != nil {
+			return err
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		return tx.Get(&c, s.commentQuery()+` WHERE c.id=?`, id)
+	})
+	return &c, err
+}
+
+func (s *CommentService) Get(id int64) (*CommentWithAuthor, error) {
+	var c CommentWithAuthor
+	err := s.db.Get(&c, s.commentQuery()+` WHERE c.id=?`, id)
+	return &c, err
+}
+
+func (s *CommentService) ListByCard(cardID int64) ([]*CommentWithAuthor, error) {
+	var comments []*CommentWithAuthor
+	err := s.db.Select(&comments, s.commentQuery()+` WHERE c.card_id=? ORDER BY c.created_at ASC, c.id ASC`, cardID)
+	if comments == nil {
+		comments = []*CommentWithAuthor{}
+	}
+	return comments, err
+}
+
+func (s *CommentService) Update(id int64, body string) (*CommentWithAuthor, error) {
+	rendered := mtr.RenderMarkdown(body)
+	if _, err := s.db.Exec(
+		`UPDATE comment SET body=?, body_rendered=?, updated_at=datetime('now') WHERE id=?`,
+		body, rendered, id,
+	); err != nil {
+		return nil, err
+	}
+	return s.Get(id)
+}
+
+func (s *CommentService) Delete(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM comment WHERE id=?`, id)
 	return err
 }
 

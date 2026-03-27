@@ -65,7 +65,7 @@
                 </button>
                 <form class="add-card-form" data-col="{{.ID}}" data-board="{{$.board.Slug}}" style="display:none">
                     <input type="text" name="title" placeholder="card title" required>
-                    <div class="add-card-actions">
+                    <div class="add-card-actions btn-row">
                         <button type="button" class="btn-cancel">cancel</button>
                         <button type="submit">add</button>
                     </div>
@@ -108,7 +108,7 @@
                 <input type="hidden" name="color" value="">
                 <input type="hidden" name="done" value="0">
                 <input type="hidden" name="late" value="0">
-                <div class="add-card-actions">
+                <div class="add-card-actions btn-row">
                     <button type="button" class="btn-cancel">cancel</button>
                     <button type="submit">add</button>
                 </div>
@@ -155,7 +155,7 @@
                         every board must have a done column
                     </div>
                 </div>
-                <div class="card-actions">
+                <div class="card-actions btn-row">
                     <button type="submit">save</button>
                 </div>
             </div>

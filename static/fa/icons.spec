@@ -33,6 +33,7 @@ fa-solid fa-tag
 fa-solid fa-tags
 fa-solid fa-list-check
 fa-solid fa-comment
+fa-solid fa-comments
 fa-solid fa-paperclip
 fa-solid fa-file
 fa-solid fa-image
