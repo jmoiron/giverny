@@ -1585,8 +1585,8 @@ $(function() {
         $columnModal.removeClass('active');
     });
 
-    $columnModal.on('click', function(e) {
-        if (e.target === this) $columnModal.removeClass('active');
+    bindOverlayClose($columnModal, function() {
+        $columnModal.removeClass('active');
     });
 
     $('#column-detail-form').on('submit', function() {
@@ -1605,6 +1605,18 @@ $(function() {
     // --- Card detail modal ---
     var $cardModal = $('#card-modal');
     var cardModalRequestID = 0;
+
+    function bindOverlayClose($overlay, onClose) {
+        if (!$overlay || !$overlay.length) return;
+        $overlay.on('mousedown', function(e) {
+            this._overlayMouseDown = (e.target === this);
+        });
+        $overlay.on('click', function(e) {
+            var startedOnOverlay = !!this._overlayMouseDown;
+            this._overlayMouseDown = false;
+            if (startedOnOverlay && e.target === this) onClose();
+        });
+    }
 
     function cardHash(cardId) {
         return '#card-' + Number(cardId);
@@ -1999,8 +2011,8 @@ $(function() {
         closeCardModal(true);
     });
 
-    $cardModal.on('click', function(e) {
-        if (e.target === this) closeCardModal(true);
+    bindOverlayClose($cardModal, function() {
+        closeCardModal(true);
     });
 
     $(document).on('dblclick', '#card-description-rendered', function() {

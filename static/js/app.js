@@ -66,6 +66,18 @@ $(function() {
         pendingAction = null;
     }
 
+    function bindOverlayClose($overlay, onClose) {
+        if (!$overlay || !$overlay.length) return;
+        $overlay.on('mousedown', function(e) {
+            this._overlayMouseDown = (e.target === this);
+        });
+        $overlay.on('click', function(e) {
+            var startedOnOverlay = !!this._overlayMouseDown;
+            this._overlayMouseDown = false;
+            if (startedOnOverlay && e.target === this) onClose();
+        });
+    }
+
     window.showConfirmModal = function(msg, action) {
         pendingAction = action || null;
         $('#confirm-message').text(msg || '');
@@ -93,11 +105,7 @@ $(function() {
         if (action) action();
     });
 
-    $modal.on('click', function(e) {
-        if (e.target === this) {
-            hideConfirmModal();
-        }
-    });
+    bindOverlayClose($modal, hideConfirmModal);
 
     $(document).on('keydown', function(e) {
         if (e.key !== 'Escape') return;
@@ -374,9 +382,7 @@ $(function() {
         closeAvatarUploadModal();
     });
 
-    $avatarUploadModal.on('click', function(e) {
-        if (e.target === this) closeAvatarUploadModal();
-    });
+    bindOverlayClose($avatarUploadModal, closeAvatarUploadModal);
 
     $avatarDropzone.on('click', function() {
         $avatarInput.trigger('click');
