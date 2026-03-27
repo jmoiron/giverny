@@ -22,6 +22,7 @@ const (
 	EventCardAttachmentsUpdated  = "card.attachments.updated"
 	EventCardLabelAdded          = "card.label.added"
 	EventCardLabelRemoved        = "card.label.removed"
+	EventLabelColorChanged       = "label.color.changed"
 	EventColumnCreated           = "column.created"
 	EventColumnChanged           = "column.changed"
 	EventColumnDeleted           = "column.deleted"
@@ -54,6 +55,12 @@ type CardLabelAddedPayload struct {
 type CardLabelRemovedPayload struct {
 	CardID  int64 `json:"card_id"`
 	LabelID int64 `json:"label_id"`
+}
+
+type LabelColorChangedPayload struct {
+	LabelID    int64  `json:"label_id"`
+	Color      string `json:"color"`
+	TextClass  string `json:"text_class"`
 }
 
 type CardTitleModifiedPayload struct {

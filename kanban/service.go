@@ -1359,6 +1359,11 @@ func (s *LabelService) Update(id int64, title, description, color string) error 
 	return err
 }
 
+func (s *LabelService) UpdateColor(id int64, color string) error {
+	_, err := s.db.Exec(`UPDATE label SET color=? WHERE id=?`, sanitizeLabelColor(color), id)
+	return err
+}
+
 func (s *LabelService) Delete(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM label WHERE id=?`, id)
 	return err

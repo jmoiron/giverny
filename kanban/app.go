@@ -120,6 +120,7 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/", a.handleLabelListPage)
 		r.Post("/", a.handleCreateLabelPage)
 		r.Post("/quick", a.handleCreateLabel)
+		r.Post("/{labelID}/color", a.handleUpdateLabelColor)
 		r.Post("/{labelID}/edit", a.handleUpdateLabelPage)
 		r.Post("/{labelID}/delete", a.handleDeleteLabelPage)
 	})
@@ -1086,6 +1087,43 @@ func (a *App) handleUpdateLabelPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/labels/", http.StatusSeeOther)
+}
+
+func (a *App) handleUpdateLabelColor(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	if user == nil || !user.IsAdmin() {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	labelID, err := parseID(chi.URLParam(r, "labelID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid label id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if err := a.labels.UpdateColor(labelID, r.FormValue("color")); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	label, err := a.labels.Get(labelID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading label failed")
+		return
+	}
+	a.publishBoardEvent(BoardGlobal, EventLabelColorChanged, LabelColorChangedPayload{
+		LabelID:   label.ID,
+		Color:     label.Color,
+		TextClass: label.TextClass,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"label_id":   label.ID,
+		"color":      label.Color,
+		"text_class": label.TextClass,
+	})
 }
 
 func (a *App) handleDeleteLabelPage(w http.ResponseWriter, r *http.Request) {

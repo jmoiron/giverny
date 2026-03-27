@@ -21,6 +21,36 @@ $(function() {
         return luminance > 0.58 ? 'fg-dark' : 'fg-light';
     }
 
+    function postForm(url, data) {
+        return fetch(url, {
+            method: 'POST',
+            body: new URLSearchParams(data || {})
+        });
+    }
+
+    function updateLabelRowPreview($row) {
+        var $chip = $row.find('.label-pill').first();
+        if (!$chip.length) return;
+
+        var color = $row.find('input[name=color]').val() || '#888888';
+        var title = $row.find('input[name=title]').val() || '';
+        var description = $row.find('input[name=description]').val() || '';
+
+        $chip.attr('style', '--label-color: ' + color);
+        $chip.removeClass('fg-light fg-dark').addClass(labelTextClass(color));
+        $chip.attr('title', description);
+        $chip.text(title);
+    }
+
+    function saveLabelRowColor($row) {
+        var $form = $row.find('.label-form').first();
+        if (!$form.length) return;
+        var action = $form.attr('action') || '';
+        var colorURL = action.replace(/\/edit$/, '/color');
+        var color = $row.find('input[name=color]').val() || '#888888';
+        postForm(colorURL, { color: color });
+    }
+
     applyTheme(localStorage.getItem('theme') || 'light');
 
     // User dropdown (declared early so the shared Escape handler can reference them).
@@ -98,17 +128,7 @@ $(function() {
 
     $(document).on('input', '.admin-labels input[name=color], .admin-labels input[name=title], .admin-labels input[name=description]', function() {
         var $row = $(this).closest('tr');
-        var $chip = $row.find('.label-pill').first();
-        if (!$chip.length) return;
-
-        var color = $row.find('input[name=color]').val() || '#888888';
-        var title = $row.find('input[name=title]').val() || '';
-        var description = $row.find('input[name=description]').val() || '';
-
-        $chip.attr('style', '--label-color: ' + color);
-        $chip.removeClass('fg-light fg-dark').addClass(labelTextClass(color));
-        $chip.attr('title', description);
-        $chip.text(title);
+        updateLabelRowPreview($row);
     });
 
     $(document).on('click', '.label-color-trigger', function(e) {
@@ -123,10 +143,12 @@ $(function() {
         e.preventDefault();
         var $picker = $(this).closest('.label-color-picker');
         var color = $(this).attr('data-color') || '#888888';
+        var $row = $picker.closest('tr');
         $picker.find('input[name=color]').val(color).trigger('input');
         $picker.find('.label-color-trigger').attr('style', '--swatch-color: ' + color);
         $picker.find('.label-color-custom').val(color);
         $picker.find('.label-color-panel').hide();
+        saveLabelRowColor($row);
     });
 
     $(document).on('click', '.label-color-swatch.more-swatch-btn', function(e) {
@@ -136,9 +158,11 @@ $(function() {
 
     $(document).on('input change', '.label-color-custom', function() {
         var $picker = $(this).closest('.label-color-picker');
+        var $row = $picker.closest('tr');
         var color = $(this).val() || '#888888';
         $picker.find('input[name=color]').val(color).trigger('input');
         $picker.find('.label-color-trigger').attr('style', '--swatch-color: ' + color);
+        saveLabelRowColor($row);
     });
 
     $(document).on('click', function(e) {

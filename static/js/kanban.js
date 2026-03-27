@@ -602,6 +602,21 @@ $(function() {
         return $pill;
     }
 
+    function applyLabelColorChanged(payload) {
+        if (!payload || !payload.label_id) return;
+        var color = payload.color || DEFAULT_LABEL_COLOR;
+        var textClass = payload.text_class || labelTextClass(color);
+        $('.label-pill[data-label-id="' + payload.label_id + '"]').each(function() {
+            $(this)
+                .attr('style', '--label-color: ' + color)
+                .removeClass('fg-light fg-dark')
+                .addClass(textClass);
+        });
+        $('#known-labels-data .known-label-option[data-label-id="' + payload.label_id + '"]')
+            .attr('data-color', color)
+            .attr('data-text-class', textClass);
+    }
+
     function getColumnCardIDs(columnId) {
         return $('.col-cards[data-column-id="' + columnId + '"] .kanban-card').map(function() {
             return Number($(this).data('id'));
@@ -1025,6 +1040,9 @@ $(function() {
             break;
         case 'card.label.removed':
             applyCardLabelRemoved(evt.payload);
+            break;
+        case 'label.color.changed':
+            applyLabelColorChanged(evt.payload);
             break;
         }
     }
