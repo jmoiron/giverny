@@ -965,12 +965,8 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	reg := mtr.RegistryFromContext(r.Context())
-	var buf bytes.Buffer
-	if err := reg.Render(&buf, "kanban/card_snippet.html", mtr.Ctx{
-		"card":  card,
-		"board": slug,
-	}); err != nil {
+	html, err := a.renderCardSnippet(r, card)
+	if err != nil {
 		slog.Error("rendering card snippet", "err", err)
 		http.Error(w, "render failed", http.StatusInternalServerError)
 		return
@@ -978,10 +974,10 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	a.publishBoardEvent(slug, EventCardCreated, CardCreatedPayload{
 		CardID:   card.ID,
 		ColumnID: colID,
-		HTML:     buf.String(),
+		HTML:     html,
 	})
 	w.Header().Set("Content-Type", "text/html")
-	if _, err := w.Write(buf.Bytes()); err != nil {
+	if _, err := io.WriteString(w, html); err != nil {
 		slog.Error("writing card snippet response", "err", err)
 	}
 }
