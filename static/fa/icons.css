@@ -67,6 +67,9 @@
 
 /* Individual icon definitions */
 /* Regular icons */
+.fa-clock {
+  --fa: "\f017";
+}
 .fa-copy {
   --fa: "\f0c5";
 }

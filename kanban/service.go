@@ -207,6 +207,36 @@ func (s *BoardService) RecentByCardActivity(limit int, isAdmin bool) ([]*Board, 
 	return boards, err
 }
 
+// NavBoards returns up to 8 boards for the side navigation, ordered by most
+// recent card activity, with boards where the user has an assigned card first.
+func (s *BoardService) NavBoards(userID int64, isAdmin bool) ([]*Board, error) {
+	var boards []*Board
+	query := `
+		SELECT b.*
+		FROM board b
+		LEFT JOIN (
+			SELECT board_id, MAX(updated_at) AS last_card_at
+			FROM card WHERE archived_at IS NULL
+			GROUP BY board_id
+		) rc ON rc.board_id = b.id
+	`
+	if !isAdmin {
+		query += ` WHERE b.visibility IN ('open','public')`
+	}
+	query += `
+		ORDER BY
+			(EXISTS(
+				SELECT 1 FROM card_assignee ca
+				JOIN card c ON c.id = ca.card_id
+				WHERE c.board_id = b.id AND ca.user_id = ?
+			)) DESC,
+			COALESCE(rc.last_card_at, b.updated_at) DESC
+		LIMIT 8
+	`
+	err := s.db.Select(&boards, query, userID)
+	return boards, err
+}
+
 func (s *BoardService) Update(id int64, name, slug, description, visibility string) error {
 	_, err := s.db.Exec(
 		`UPDATE board SET name=?, slug=?, description=?, visibility=?, updated_at=datetime('now') WHERE id=?`,

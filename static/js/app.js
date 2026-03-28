@@ -53,6 +53,49 @@ $(function() {
 
     applyTheme(localStorage.getItem('theme') || 'light');
 
+    // Side navigation
+    var $sideNav = $('#side-nav');
+    var $sideNavToggle = $('#side-nav-toggle');
+    var sideNavBoardsLoaded = false;
+
+    function loadSideNavBoards() {
+        if (sideNavBoardsLoaded) return;
+        sideNavBoardsLoaded = true;
+        fetch('/api/nav-boards/')
+            .then(function(r) { return r.json(); })
+            .then(function(boards) {
+                var $list = $('#side-nav-boards');
+                $list.empty();
+                if (!boards || !boards.length) return;
+                boards.forEach(function(b) {
+                    var $a = $('<a class="side-nav-board-link"></a>');
+                    $a.attr('href', '/boards/' + b.slug + '/');
+                    $a.text(b.name);
+                    $list.append($a);
+                });
+            })
+            .catch(function() {});
+    }
+
+    if ($sideNav.length) {
+        // The inline <head> script may have set html.side-nav-open to avoid a
+        // flash on load. Transfer that to #side-nav.open (same computed width,
+        // so no transition fires) then drop the html class.
+        if (document.documentElement.classList.contains('side-nav-open')) {
+            $sideNav.addClass('open');
+            $sideNavToggle.addClass('active');
+            document.documentElement.classList.remove('side-nav-open');
+            loadSideNavBoards();
+        }
+        $sideNavToggle.on('click', function() {
+            var wasOpen = $sideNav.hasClass('open');
+            $sideNav.toggleClass('open');
+            $sideNavToggle.toggleClass('active');
+            localStorage.setItem('sideNavOpen', wasOpen ? '0' : '1');
+            if (!wasOpen) loadSideNavBoards();
+        });
+    }
+
     // User dropdown (declared early so the shared Escape handler can reference them).
     var $trigger = $('#user-menu-trigger');
     var $dropdown = $('#user-dropdown');

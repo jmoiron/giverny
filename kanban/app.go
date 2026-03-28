@@ -124,6 +124,11 @@ func (a *App) Register(reg *mtr.Registry) {
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
 
 func (a *App) Bind(r chi.Router) {
+	r.Route("/api", func(r chi.Router) {
+		r.Use(gauth.RequireAuth)
+		r.Get("/nav-boards/", a.handleNavBoards)
+	})
+
 	r.Route("/labels", func(r chi.Router) {
 		r.Use(gauth.RequireAuth)
 		r.Get("/", a.handleLabelListPage)
@@ -200,6 +205,26 @@ func (a *App) Bind(r chi.Router) {
 			})
 		})
 	})
+}
+
+// handleNavBoards returns a JSON list of up to 8 boards for the side nav,
+// ordered by most recent card activity with user-assigned boards first.
+func (a *App) handleNavBoards(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	boards, err := a.boards.NavBoards(user.ID, user.IsAdmin())
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading boards")
+		return
+	}
+	type boardItem struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
+	items := make([]boardItem, 0, len(boards))
+	for _, b := range boards {
+		items = append(items, boardItem{Name: b.Name, Slug: b.Slug})
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 // handleWS upgrades the request to a WebSocket connection and registers the

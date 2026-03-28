@@ -47,6 +47,7 @@ fa-solid fa-plug
 fa-solid fa-plug-circle-bolt
 fa-solid fa-bell
 fa-solid fa-user-check
+fa-regular fa-clock
 fa-regular fa-handshake
 fa-regular fa-copy
 fa-solid fa-trash-can

@@ -7,6 +7,7 @@
             (function() {
                 var t = localStorage.getItem('theme') || 'light';
                 if (t === 'dark') document.documentElement.classList.add('dark');
+                if (localStorage.getItem('sideNavOpen') === '1') document.documentElement.classList.add('side-nav-open');
             })();
         </script>
         {{if .debug}}
@@ -22,6 +23,11 @@
     <body{{if .user}} data-user-timezone="{{.user.Timezone}}"{{end}}>
         <header>
             <nav>
+                {{if .user}}
+                <button class="nav-icon-link" id="side-nav-toggle" title="navigation menu" aria-label="toggle navigation menu">
+                    <i class="fa-solid fa-bars nav-icon"></i>
+                </button>
+                {{end}}
                 <a href="/" class="logo">Giverny</a>
                 {{if .user}}
                 <a href="/boards/" class="nav-link">
@@ -82,9 +88,34 @@
                 </div>
             </nav>
         </header>
-        <main{{if .mainClass}} class="{{.mainClass}}"{{end}}>
-            {{.body}}
-        </main>
+        <div class="page-body">
+            {{if .user}}
+            <nav id="side-nav">
+                <div class="side-nav-inner">
+                    <a href="#" class="side-nav-item">
+                        <i class="fa-solid fa-user side-nav-icon"></i>
+                        <span>my tasks</span>
+                    </a>
+                    <a href="#" class="side-nav-item">
+                        <i class="fa-solid fa-bell side-nav-icon"></i>
+                        <span>subscribed</span>
+                    </a>
+                    <a href="#" class="side-nav-item">
+                        <i class="fa-regular fa-clock side-nav-icon"></i>
+                        <span>in progress</span>
+                    </a>
+                    <div class="side-nav-section-label">
+                        <i class="fa-solid fa-table-columns side-nav-icon"></i>
+                        <span>boards</span>
+                    </div>
+                    <div class="side-nav-boards" id="side-nav-boards"></div>
+                </div>
+            </nav>
+            {{end}}
+            <main{{if .mainClass}} class="{{.mainClass}}"{{end}}>
+                {{.body}}
+            </main>
+        </div>
         <div id="confirm-modal" class="modal-overlay">
             <div class="modal">
                 <p id="confirm-message"></p>
