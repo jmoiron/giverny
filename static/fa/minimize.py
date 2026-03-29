@@ -371,22 +371,27 @@ def subset_font_file(source_font_path: str, codepoints: Set[int], output_path: s
     if not source_path.exists():
         raise FileNotFoundError(f"Font file not found: {source_font_path}")
     
-    # Load the source font
-    font = TTFont(source_font_path)
-    
+    # Load the source font; recalcTimestamp=False prevents save() from
+    # overwriting head.modified with the current time on every run.
+    font = TTFont(source_font_path, recalcTimestamp=False)
+
     # Create subsetter and configure options
     subsetter = Subsetter()
-    
+
     # Configure subsetting options for optimal output
     subsetter.options.desubroutinize = True  # Remove subroutines for smaller size
     subsetter.options.layout_features = []  # Remove layout features we don't need
     subsetter.options.name_IDs = ['*']  # Keep all name records
     subsetter.options.notdef_outline = True  # Keep .notdef glyph
-    
+
     # Subset the font to include only the specified codepoints
     subsetter.populate(unicodes=codepoints)
     subsetter.subset(font)
-    
+
+    # Zero out the modified timestamp for reproducible output
+    if 'head' in font:
+        font['head'].modified = 0
+
     # Save the subset font
     font.save(output_path)
     font.close()
@@ -480,6 +485,9 @@ def combine_font_subsets(family_codepoints: Dict[str, Set[int]], output_path: st
                 
                 merger = Merger()
                 merged_font = merger.merge(temp_files)
+                merged_font.recalcTimestamp = False
+                if 'head' in merged_font:
+                    merged_font['head'].modified = 0
                 merged_font.save(output_path)
                 merged_font.close()
             
