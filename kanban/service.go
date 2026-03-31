@@ -23,8 +23,107 @@ type ColumnWithCards struct {
 
 type DashboardCard struct {
 	Card
-	BoardName string `db:"board_name"`
-	BoardSlug string `db:"board_slug"`
+	BoardName  string `db:"board_name"`
+	BoardSlug  string `db:"board_slug"`
+	ColumnName string `db:"column_name"`
+	ColumnDone bool   `db:"column_done"`
+	Subscribed bool   `db:"-"`
+}
+
+// CardListFilter holds the filter criteria for the cross-board card list.
+type CardListFilter struct {
+	Query         string
+	BoardID       int64
+	LabelIDs      []int64
+	LabelMatchAll bool
+	UserID        int64
+	UserUnassigned bool
+	SubUserID     int64
+	SubUnsubscribed bool
+	ColumnName    string
+	DoneState     string
+}
+
+type ColumnOption struct {
+	Name string `db:"name"`
+}
+
+type ViewService struct{ db db.DB }
+
+func NewViewService(dbh db.DB) *ViewService { return &ViewService{db: dbh} }
+
+func (s *ViewService) ListForUser(userID int64, limit int) ([]*CardView, error) {
+	var views []*CardView
+	query := `SELECT * FROM card_view WHERE user_id = ? ORDER BY created_at DESC, id DESC`
+	args := []any{userID}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	err := s.db.Select(&views, query, args...)
+	return views, err
+}
+
+func (s *ViewService) GetForUser(id, userID int64) (*CardView, error) {
+	var view CardView
+	err := s.db.Get(&view, `SELECT * FROM card_view WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &view, nil
+}
+
+func (s *ViewService) GetBySlugForUser(slug string, userID int64) (*CardView, error) {
+	var view CardView
+	err := s.db.Get(&view, `SELECT * FROM card_view WHERE user_id = ? AND slug = ?`, userID, slug)
+	if err != nil {
+		return nil, err
+	}
+	return &view, nil
+}
+
+func (s *ViewService) uniqueSlug(userID int64, name string) string {
+	return s.uniqueSlugExcept(userID, 0, name)
+}
+
+func (s *ViewService) uniqueSlugExcept(userID, viewID int64, name string) string {
+	base := slugify(name)
+	if base == "" {
+		base = "view"
+	}
+	slug := base
+	for i := 2; ; i++ {
+		var count int
+		if err := s.db.Get(&count, `SELECT COUNT(1) FROM card_view WHERE user_id = ? AND slug = ? AND id != ?`, userID, slug, viewID); err == nil && count == 0 {
+			return slug
+		}
+		slug = fmt.Sprintf("%s-%d", base, i)
+	}
+}
+
+func (s *ViewService) Create(userID int64, name, description, queryString string) (*CardView, error) {
+	slug := s.uniqueSlug(userID, name)
+	res, err := s.db.Exec(`INSERT INTO card_view (user_id, name, slug, description, query_string) VALUES (?, ?, ?, ?, ?)`, userID, name, slug, description, queryString)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	return s.GetForUser(id, userID)
+}
+
+func (s *ViewService) Update(id, userID int64, name, description, queryString string) (*CardView, error) {
+	slug := s.uniqueSlugExcept(userID, id, name)
+	_, err := s.db.Exec(`UPDATE card_view SET name = ?, slug = ?, description = ?, query_string = ? WHERE id = ? AND user_id = ?`,
+		name, slug, description, queryString, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetForUser(id, userID)
+}
+
+func (s *ViewService) Delete(id, userID int64) error {
+	_, err := s.db.Exec(`DELETE FROM card_view WHERE id = ? AND user_id = ?`, id, userID)
+	return err
 }
 
 type BoardService struct{ db db.DB }
@@ -165,6 +264,12 @@ func (s *BoardService) Create(name, slug, description, visibility string, create
 func (s *BoardService) GetBySlug(slug string) (*Board, error) {
 	var b Board
 	err := s.db.Get(&b, `SELECT * FROM board WHERE slug=?`, slug)
+	return &b, err
+}
+
+func (s *BoardService) Get(id int64) (*Board, error) {
+	var b Board
+	err := s.db.Get(&b, `SELECT * FROM board WHERE id=?`, id)
 	return &b, err
 }
 
@@ -356,6 +461,21 @@ func (s *ColumnService) Reorder(boardID int64, ids []int64) error {
 	})
 }
 
+func (s *ColumnService) ListAllWithBoards(isAdmin bool) ([]*ColumnOption, error) {
+	query := `
+		SELECT DISTINCT bc.name
+		FROM board_column bc
+		JOIN board b ON b.id = bc.board_id
+	`
+	if !isAdmin {
+		query += ` WHERE b.visibility IN ('open','public')`
+	}
+	query += ` ORDER BY bc.name COLLATE NOCASE`
+	var cols []*ColumnOption
+	err := s.db.Select(&cols, query)
+	return cols, err
+}
+
 func (s *ColumnService) IDsByBoard(boardID int64) ([]int64, error) {
 	var ids []int64
 	err := s.db.Select(&ids, `SELECT id FROM board_column WHERE board_id=? ORDER BY position, id`, boardID)
@@ -480,6 +600,152 @@ func (s *CardService) ListArchivedByBoard(boardID int64) ([]*Card, error) {
 		return nil, err
 	}
 	return cards, nil
+}
+
+var cardListSortCols = map[string]string{
+	"title":   "c.title",
+	"board":   "b.name",
+	"created": "c.created_at",
+	"updated": "c.updated_at",
+	"due":     "c.due_date",
+	"column":  "bc.name",
+	"done":    "bc.done",
+	"start":   "c.start_date",
+}
+
+// ListAll returns all non-archived cards across visible boards, sorted by the
+// given column and direction. Both are validated against a whitelist.
+func (s *CardService) ListAll(isAdmin bool, sortCol, sortDir string, f CardListFilter, currentUserID int64) ([]*DashboardCard, error) {
+	col, ok := cardListSortCols[sortCol]
+	if !ok {
+		col = "c.updated_at"
+	}
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+	query := `
+		SELECT c.*, b.name AS board_name, b.slug AS board_slug,
+		       bc.name AS column_name, bc.done AS column_done
+		FROM card c
+		JOIN board b ON b.id = c.board_id
+		JOIN board_column bc ON bc.id = c.column_id
+		WHERE c.archived_at IS NULL
+	`
+	var args []any
+	if !isAdmin {
+		query += ` AND b.visibility IN ('open','public')`
+	}
+	if f.BoardID > 0 {
+		query += ` AND c.board_id = ?`
+		args = append(args, f.BoardID)
+	}
+	if strings.TrimSpace(f.ColumnName) != "" {
+		query += ` AND LOWER(bc.name) = LOWER(?)`
+		args = append(args, strings.TrimSpace(f.ColumnName))
+	}
+	if f.UserUnassigned {
+		query += ` AND NOT EXISTS (SELECT 1 FROM card_assignee ca WHERE ca.card_id = c.id)`
+	} else if f.UserID > 0 {
+		query += ` AND EXISTS (SELECT 1 FROM card_assignee ca WHERE ca.card_id = c.id AND ca.user_id = ?)`
+		args = append(args, f.UserID)
+	}
+	if f.SubUnsubscribed {
+		query += ` AND NOT EXISTS (SELECT 1 FROM card_subscription cs WHERE cs.card_id = c.id)`
+	} else if f.SubUserID > 0 {
+		query += ` AND EXISTS (SELECT 1 FROM card_subscription cs WHERE cs.card_id = c.id AND cs.user_id = ?)`
+		args = append(args, f.SubUserID)
+	}
+	if f.DoneState == "done" {
+		query += ` AND bc.done = 1`
+	} else if f.DoneState == "not_done" {
+		query += ` AND bc.done = 0`
+	}
+	if len(f.LabelIDs) > 0 {
+		if f.LabelMatchAll {
+			query += ` AND (
+				SELECT COUNT(DISTINCT cl.label_id)
+				FROM card_label cl
+				WHERE cl.card_id = c.id
+				  AND cl.label_id IN (?)
+			) = ?`
+			labelArgs := make([]any, 0, len(f.LabelIDs)+1)
+			for _, id := range f.LabelIDs {
+				labelArgs = append(labelArgs, id)
+			}
+			var err error
+			query, args, err = sqlx.In(query, append(args, append(labelArgs, len(f.LabelIDs))...)...)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			query += ` AND EXISTS (SELECT 1 FROM card_label cl WHERE cl.card_id = c.id AND cl.label_id IN (?))`
+			labelArgs := make([]any, 0, len(f.LabelIDs))
+			for _, id := range f.LabelIDs {
+				labelArgs = append(labelArgs, id)
+			}
+			var err error
+			query, args, err = sqlx.In(query, append(args, labelArgs...)...)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if f.Query != "" {
+		query += ` AND (c.title LIKE ? OR c.content LIKE ? OR EXISTS (SELECT 1 FROM comment cm WHERE cm.card_id = c.id AND cm.body LIKE ?))`
+		q := "%" + f.Query + "%"
+		args = append(args, q, q, q)
+	}
+	query += fmt.Sprintf(` ORDER BY %s %s NULLS LAST`, col, strings.ToUpper(sortDir))
+	var cards []*DashboardCard
+	if err := s.db.Select(&cards, query, args...); err != nil {
+		return nil, err
+	}
+	ptrs := make([]*Card, 0, len(cards))
+	for _, c := range cards {
+		ptrs = append(ptrs, &c.Card)
+	}
+	if err := s.attachLabels(ptrs); err != nil {
+		return nil, err
+	}
+	if err := s.attachAssignees(ptrs); err != nil {
+		return nil, err
+	}
+	if err := s.attachChecklistSummary(ptrs); err != nil {
+		return nil, err
+	}
+	if err := s.attachSubscriptions(currentUserID, cards); err != nil {
+		return nil, err
+	}
+	return cards, nil
+}
+
+func (s *CardService) attachSubscriptions(userID int64, cards []*DashboardCard) error {
+	if len(cards) == 0 || userID == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(cards))
+	byID := make(map[int64]*DashboardCard, len(cards))
+	for _, c := range cards {
+		ids = append(ids, c.ID)
+		byID[c.ID] = c
+	}
+	query, args, err := sqlx.In(`SELECT card_id FROM card_subscription WHERE user_id = ? AND card_id IN (?)`, userID, ids)
+	if err != nil {
+		return err
+	}
+	type subRow struct {
+		CardID int64 `db:"card_id"`
+	}
+	var rows []subRow
+	if err := s.db.Select(&rows, query, args...); err != nil {
+		return err
+	}
+	for _, r := range rows {
+		if c := byID[r.CardID]; c != nil {
+			c.Subscribed = true
+		}
+	}
+	return nil
 }
 
 func (s *CardService) Recent(limit int, isAdmin bool) ([]*DashboardCard, error) {

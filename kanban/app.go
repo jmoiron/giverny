@@ -12,8 +12,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +43,7 @@ type App struct {
 	labels   *LabelService
 	comments *CommentService
 	users    *gauth.UserProfileService
+	views    *ViewService
 	fss      vfs.Registry
 }
 
@@ -56,8 +59,18 @@ func NewApp(dbh db.DB, fss vfs.Registry) *App {
 		labels:   NewLabelService(dbh),
 		comments: NewCommentService(dbh),
 		users:    gauth.NewUserProfileService(dbh),
+		views:    NewViewService(dbh),
 		fss:      fss,
 	}
+}
+
+// CardListRow is the view model for a single row in the card list view.
+type CardListRow struct {
+	*DashboardCard
+	CreatedAtDisplay string
+	UpdatedAtDisplay string
+	DueDateDisplay   string
+	StartDateDisplay string
 }
 
 // CommentDisplay wraps CommentWithAuthor with pre-rendered HTML for template use.
@@ -85,7 +98,59 @@ func (a *App) RenderDashboardCards(r *http.Request, cards []*DashboardCard) ([]*
 	return a.renderDashboardCards(r, cards)
 }
 
+func (a *App) repairLegacyCardViewSchema() error {
+	var tableCount int
+	if err := a.db.Get(&tableCount, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'card_view'`); err != nil {
+		return err
+	}
+	if tableCount == 0 {
+		return nil
+	}
+
+	type pragmaColumn struct {
+		CID       int            `db:"cid"`
+		Name      string         `db:"name"`
+		Type      string         `db:"type"`
+		NotNull   int            `db:"notnull"`
+		Default   sql.NullString `db:"dflt_value"`
+		PrimaryKey int           `db:"pk"`
+	}
+	var cols []pragmaColumn
+	if err := a.db.Select(&cols, `PRAGMA table_info(card_view)`); err != nil {
+		return err
+	}
+	hasSlug := false
+	hasDescription := false
+	for _, col := range cols {
+		switch col.Name {
+		case "slug":
+			hasSlug = true
+		case "description":
+			hasDescription = true
+		}
+	}
+	if !hasSlug {
+		if _, err := a.db.Exec(`ALTER TABLE card_view ADD COLUMN slug TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !hasDescription {
+		if _, err := a.db.Exec(`ALTER TABLE card_view ADD COLUMN description TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !hasSlug {
+		if _, err := a.db.Exec(`UPDATE card_view SET slug = 'view-' || id WHERE slug = ''`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (a *App) Migrate() error {
+	if err := a.repairLegacyCardViewSchema(); err != nil {
+		return fmt.Errorf("repair legacy card_view schema: %w", err)
+	}
 	m, err := monarch.NewManager(a.db)
 	if err != nil {
 		return err
@@ -103,6 +168,7 @@ func (a *App) Migrate() error {
 		SubscriptionMigrations,
 		CardFTSMigrations,
 		CommentFTSMigrations,
+		CardViewMigrations,
 	}
 	for _, s := range sets {
 		if err := m.Upgrade(s); err != nil {
@@ -118,7 +184,10 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("kanban/board_edit.html", templates)
 	reg.AddPathFS("kanban/card.html", templates)
 	reg.AddPathFS("kanban/card_snippet.html", templates)
+	reg.AddPathFS("kanban/card_modal_shell.html", templates)
 	reg.AddPathFS("kanban/labels.html", templates)
+	reg.AddPathFS("kanban/card_list.html", templates)
+	reg.AddPathFS("kanban/view_list.html", templates)
 }
 
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
@@ -127,6 +196,21 @@ func (a *App) Bind(r chi.Router) {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(gauth.RequireAuth)
 		r.Get("/nav-boards/", a.handleNavBoards)
+		r.Get("/nav-views/", a.handleNavViews)
+		r.Post("/views/", a.handleSaveView)
+		r.Post("/views/{viewID}/edit", a.handleEditView)
+		r.Post("/views/{viewID}/delete", a.handleDeleteView)
+	})
+
+	r.Route("/cards", func(r chi.Router) {
+		r.Use(gauth.RequireAuth)
+		r.Get("/", a.handleCardList)
+		r.Get("/my-tasks/", a.handleMyTasks)
+		r.Get("/subscribed/", a.handleSubscribedCards)
+		r.Get("/in-progress/", a.handleInProgressCards)
+		r.Get("/views/", a.handleViewList)
+		r.Get("/views/{slug}/", a.handleViewDetail)
+		r.Get("/{cardID}/", a.handleGetCardByID)
 	})
 
 	r.Route("/labels", func(r chi.Router) {
@@ -205,6 +289,389 @@ func (a *App) Bind(r chi.Router) {
 			})
 		})
 	})
+}
+
+// handleCardList renders the cross-board card list view with sortable columns and filters.
+func (a *App) buildCardListPage(r *http.Request, user *gauth.User, q url.Values, listPath string, activeView *CardView) (mtr.Ctx, error) {
+	sortCol := q.Get("sort")
+	sortDir := q.Get("dir")
+	validSorts := map[string]bool{"title": true, "board": true, "created": true, "updated": true, "due": true, "column": true, "done": true, "start": true}
+	if !validSorts[sortCol] {
+		sortCol = "updated"
+	}
+	if sortDir != "asc" {
+		sortDir = "desc"
+	}
+
+	parseInt := func(s string) int64 { v, _ := strconv.ParseInt(s, 10, 64); return v }
+	parseIDs := func(values []string) []int64 {
+		ids := make([]int64, 0, len(values))
+		for _, raw := range values {
+			if id := parseInt(raw); id > 0 {
+				ids = append(ids, id)
+			}
+		}
+		return ids
+	}
+	validState := func(value string, allowed ...string) string {
+		for _, candidate := range allowed {
+			if value == candidate {
+				return value
+			}
+		}
+		return "all"
+	}
+	rawAssigned := strings.TrimSpace(q.Get("filter_user"))
+	rawSubscribed := strings.TrimSpace(q.Get("filter_subscribed"))
+	filter := CardListFilter{
+		Query:         q.Get("q"),
+		BoardID:       parseInt(q.Get("filter_board")),
+		LabelIDs:      parseIDs(q["filter_label"]),
+		LabelMatchAll: q.Get("filter_label_match") != "any",
+		UserID:        parseInt(rawAssigned),
+		UserUnassigned: rawAssigned == "__unassigned__",
+		SubUserID:     parseInt(rawSubscribed),
+		SubUnsubscribed: rawSubscribed == "__unsubscribed__",
+		ColumnName:    strings.TrimSpace(q.Get("filter_col")),
+		DoneState:     validState(q.Get("filter_done_state"), "all", "done", "not_done"),
+	}
+	filterActive := filter.Query != "" || filter.BoardID != 0 || len(filter.LabelIDs) > 0 ||
+		filter.UserID != 0 || filter.UserUnassigned || filter.SubUserID != 0 || filter.SubUnsubscribed ||
+		filter.ColumnName != "" || filter.DoneState != "all"
+
+	cards, err := a.cards.ListAll(user.IsAdmin(), sortCol, sortDir, filter, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([]*CardListRow, 0, len(cards))
+	for _, c := range cards {
+		row := &CardListRow{
+			DashboardCard:    c,
+			CreatedAtDisplay: formatTimestampForUser(r.Context(), c.CreatedAt),
+			UpdatedAtDisplay: formatTimestampForUser(r.Context(), c.UpdatedAt),
+		}
+		if c.DueDate != nil {
+			row.DueDateDisplay = formatTimestampForUser(r.Context(), *c.DueDate)
+		}
+		if c.StartDate != nil {
+			row.StartDateDisplay = formatTimestampForUser(r.Context(), *c.StartDate)
+		}
+		rows = append(rows, row)
+	}
+
+	// Build sort link URLs that preserve all current filter/cols params.
+	flipDir := func(col string) string {
+		if sortCol == col && sortDir == "asc" {
+			return "desc"
+		}
+		if sortCol == col {
+			return "asc"
+		}
+		return "desc"
+	}
+	baseQ := url.Values{}
+	for k, v := range q {
+		if k != "sort" && k != "dir" {
+			baseQ[k] = v
+		}
+	}
+	sortURL := func(col string) template.URL {
+		sq := url.Values{}
+		for k, v := range baseQ {
+			sq[k] = v
+		}
+		sq.Set("sort", col)
+		sq.Set("dir", flipDir(col))
+		return template.URL(listPath + "?" + sq.Encode())
+	}
+	sortURLs := map[string]template.URL{
+		"title":   sortURL("title"),
+		"board":   sortURL("board"),
+		"created": sortURL("created"),
+		"updated": sortURL("updated"),
+		"due":     sortURL("due"),
+		"column":  sortURL("column"),
+		"done":    sortURL("done"),
+		"start":   sortURL("start"),
+	}
+	// Sort direction indicators for current sort column.
+	sortDirs := map[string]string{
+		"title": flipDir("title"), "board": flipDir("board"),
+		"created": flipDir("created"), "updated": flipDir("updated"), "due": flipDir("due"),
+		"column": flipDir("column"), "done": flipDir("done"), "start": flipDir("start"),
+	}
+
+	// Clear URL preserves sort but removes all filters.
+	clearURL := template.URL(listPath + "?sort=" + sortCol + "&dir=" + sortDir)
+
+	// Fetch filter dropdown data.
+	allUsers, _ := a.users.List()
+	allLabels, _ := a.labels.List()
+	allBoards, _ := a.boards.List(user.IsAdmin())
+	allColumns, _ := a.columns.ListAllWithBoards(user.IsAdmin())
+	cardModalShell, err := a.renderCardModalShell(r)
+	if err != nil {
+		return nil, err
+	}
+	pageTitle := "cards"
+	if activeView != nil && strings.TrimSpace(activeView.Name) != "" {
+		pageTitle = activeView.Name
+	}
+	filterPanelOpen := filterActive && activeView == nil
+	return mtr.Ctx{
+		"title":        pageTitle,
+		"user":         user,
+		"pageTitle":    pageTitle,
+		"cards":        rows,
+		"sort":         sortCol,
+		"dir":          sortDir,
+		"sortURLs":     sortURLs,
+		"sortDirs":     sortDirs,
+		"clearURL":     clearURL,
+		"filterActive": filterActive,
+		"filterPanelOpen": filterPanelOpen,
+		"listPath":     listPath,
+		"filterBoard":  filter.BoardID,
+		"filterLabels": filter.LabelIDs,
+		"filterLabelMatchAll": filter.LabelMatchAll,
+		"filterUser":   filter.UserID,
+		"filterUserUnassigned": filter.UserUnassigned,
+		"filterSub":    filter.SubUserID,
+		"filterSubUnsubscribed": filter.SubUnsubscribed,
+		"filterCol":    filter.ColumnName,
+		"filterQuery":  filter.Query,
+		"filterDoneState": filter.DoneState,
+		"users":        allUsers,
+		"labels":       allLabels,
+		"boards":       allBoards,
+		"columns":      allColumns,
+		"cardModalShell": cardModalShell,
+		"currentQueryString": q.Encode(),
+		"activeView": activeView,
+	}, nil
+}
+
+func (a *App) handleCardList(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	ctx, err := a.buildCardListPage(r, user, r.URL.Query(), "/cards/", nil)
+	if err != nil {
+		app.Http500("listing cards", w, err)
+		return
+	}
+	reg := mtr.RegistryFromContext(r.Context())
+	if err := reg.RenderWithBase(w, "base", "kanban/card_list.html", ctx); err != nil {
+		app.Http500("rendering card list", w, err)
+	}
+}
+
+func mergeQueryValues(base, override url.Values) url.Values {
+	merged := url.Values{}
+	for k, v := range base {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		merged[k] = cp
+	}
+	for k, v := range override {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		merged[k] = cp
+	}
+	return merged
+}
+
+func (a *App) renderPresetCardList(w http.ResponseWriter, r *http.Request, title, path string, preset url.Values) {
+	user := gauth.UserFromContext(r.Context())
+	q := mergeQueryValues(preset, r.URL.Query())
+	ctx, err := a.buildCardListPage(r, user, q, path, nil)
+	if err != nil {
+		app.Http500("listing cards", w, err)
+		return
+	}
+	ctx["title"] = title
+	ctx["pageTitle"] = title
+	ctx["filterPanelOpen"] = false
+	reg := mtr.RegistryFromContext(r.Context())
+	if err := reg.RenderWithBase(w, "base", "kanban/card_list.html", ctx); err != nil {
+		app.Http500("rendering card list", w, err)
+	}
+}
+
+func (a *App) handleMyTasks(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	a.renderPresetCardList(w, r, "my tasks", "/cards/my-tasks/", url.Values{
+		"filter_user":       {strconv.FormatInt(user.ID, 10)},
+		"filter_done_state": {"not_done"},
+	})
+}
+
+func (a *App) handleSubscribedCards(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	a.renderPresetCardList(w, r, "subscribed", "/cards/subscribed/", url.Values{
+		"filter_subscribed": {strconv.FormatInt(user.ID, 10)},
+		"filter_done_state": {"not_done"},
+	})
+}
+
+func (a *App) handleInProgressCards(w http.ResponseWriter, r *http.Request) {
+	a.renderPresetCardList(w, r, "in progress", "/cards/in-progress/", url.Values{
+		"filter_col": {"In Progress"},
+	})
+}
+
+func (a *App) handleViewList(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	views, err := a.views.ListForUser(user.ID, 0)
+	if err != nil {
+		app.Http500("loading views", w, err)
+		return
+	}
+	reg := mtr.RegistryFromContext(r.Context())
+	if err := reg.RenderWithBase(w, "base", "kanban/view_list.html", mtr.Ctx{
+		"title": "views",
+		"user":  user,
+		"views": views,
+	}); err != nil {
+		app.Http500("rendering view list", w, err)
+	}
+}
+
+func (a *App) handleViewDetail(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	view, err := a.views.GetBySlugForUser(chi.URLParam(r, "slug"), user.ID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	baseQ, err := url.ParseQuery(view.QueryString)
+	if err != nil {
+		baseQ = url.Values{}
+	}
+	q := mergeQueryValues(baseQ, r.URL.Query())
+	ctx, err := a.buildCardListPage(r, user, q, fmt.Sprintf("/cards/views/%s/", view.Slug), view)
+	if err != nil {
+		app.Http500("loading view cards", w, err)
+		return
+	}
+	reg := mtr.RegistryFromContext(r.Context())
+	if err := reg.RenderWithBase(w, "base", "kanban/card_list.html", ctx); err != nil {
+		app.Http500("rendering view detail", w, err)
+	}
+}
+
+// handleNavViews returns the user's saved views as JSON for the side nav.
+func (a *App) handleNavViews(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	views, err := a.views.ListForUser(user.ID, 10)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "loading views")
+		return
+	}
+	type viewItem struct {
+		ID          int64  `json:"id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Description string `json:"description"`
+		QueryString string `json:"qs"`
+	}
+	items := make([]viewItem, 0, len(views))
+	for _, v := range views {
+		items = append(items, viewItem{ID: v.ID, Name: v.Name, Slug: v.Slug, Description: v.Description, QueryString: v.QueryString})
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// handleSaveView creates a new saved view for the current user.
+func (a *App) handleSaveView(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	description := strings.TrimSpace(r.FormValue("description"))
+	queryString := r.FormValue("query_string")
+	if name == "" {
+		apiErr(w, http.StatusBadRequest, "name required")
+		return
+	}
+	view, err := a.views.Create(user.ID, name, description, queryString)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "saving view")
+		return
+	}
+	type viewItem struct {
+		ID          int64  `json:"id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Description string `json:"description"`
+		QueryString string `json:"qs"`
+		CreatedAt   string `json:"created_at"`
+	}
+	writeJSON(w, http.StatusOK, viewItem{
+		ID:          view.ID,
+		Name:        view.Name,
+		Slug:        view.Slug,
+		Description: view.Description,
+		QueryString: view.QueryString,
+		CreatedAt:   formatTimestampForUser(r.Context(), view.CreatedAt),
+	})
+}
+
+func (a *App) handleEditView(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	viewID, err := strconv.ParseInt(chi.URLParam(r, "viewID"), 10, 64)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid view id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	description := strings.TrimSpace(r.FormValue("description"))
+	queryString := r.FormValue("query_string")
+	if name == "" {
+		apiErr(w, http.StatusBadRequest, "name required")
+		return
+	}
+	view, err := a.views.Update(viewID, user.ID, name, description, queryString)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "saving view")
+		return
+	}
+	type viewItem struct {
+		ID          int64  `json:"id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Description string `json:"description"`
+		QueryString string `json:"qs"`
+		CreatedAt   string `json:"created_at"`
+	}
+	writeJSON(w, http.StatusOK, viewItem{
+		ID:          view.ID,
+		Name:        view.Name,
+		Slug:        view.Slug,
+		Description: view.Description,
+		QueryString: view.QueryString,
+		CreatedAt:   formatTimestampForUser(r.Context(), view.CreatedAt),
+	})
+}
+
+// handleDeleteView deletes a saved view owned by the current user.
+func (a *App) handleDeleteView(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	viewID, err := strconv.ParseInt(chi.URLParam(r, "viewID"), 10, 64)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid view id")
+		return
+	}
+	if err := a.views.Delete(viewID, user.ID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "deleting view")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // handleNavBoards returns a JSON list of up to 8 boards for the side nav,
@@ -381,6 +848,15 @@ func formatTimestampForUser(ctx context.Context, t time.Time) string {
 
 func (a *App) renderCardSnippet(r *http.Request, card *Card) (string, error) {
 	return a.renderCardSnippetWithOptions(r, card, true)
+}
+
+func (a *App) renderCardModalShell(r *http.Request) (template.HTML, error) {
+	reg := mtr.RegistryFromContext(r.Context())
+	var buf bytes.Buffer
+	if err := reg.Render(&buf, "kanban/card_modal_shell.html", nil); err != nil {
+		return "", err
+	}
+	return template.HTML(buf.String()), nil
 }
 
 func (a *App) renderCardSnippetWithOptions(r *http.Request, card *Card, draggable bool) (string, error) {
@@ -801,6 +1277,11 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("rendering archived cards", w, err)
 		return
 	}
+	cardModalShell, err := a.renderCardModalShell(r)
+	if err != nil {
+		app.Http500("rendering card modal shell", w, err)
+		return
+	}
 
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board.html", mtr.Ctx{
@@ -811,6 +1292,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		"user":      user,
 		"isAdmin":   user != nil && user.IsAdmin(),
 		"canEdit":   canEdit,
+		"cardModalShell": cardModalShell,
 		"mainClass": "board-main",
 	}); err != nil {
 		app.Http500("rendering board", w, err)
@@ -1177,30 +1659,7 @@ func (a *App) handleDeleteLabelPage(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/labels/", http.StatusSeeOther)
 }
 
-func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
-	slug := chi.URLParam(r, "slug")
-	cardIDStr := chi.URLParam(r, "cardID")
-	user := gauth.UserFromContext(r.Context())
-
-	board, err := a.boards.GetBySlug(slug)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	cardID, err := parseID(cardIDStr)
-	if err != nil {
-		http.Error(w, "invalid card id", http.StatusBadRequest)
-		return
-	}
-	card, err := a.cards.Get(cardID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	if card.BoardID != board.ID {
-		http.NotFound(w, r)
-		return
-	}
+func (a *App) renderCardModal(w http.ResponseWriter, r *http.Request, board *Board, card *Card, user *gauth.User) {
 	if !canViewBoard(board, user) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -1271,6 +1730,53 @@ func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.Error("rendering card", "err", err)
 	}
+}
+
+func (a *App) handleGetCard(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	cardIDStr := chi.URLParam(r, "cardID")
+	user := gauth.UserFromContext(r.Context())
+
+	board, err := a.boards.GetBySlug(slug)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	cardID, err := parseID(cardIDStr)
+	if err != nil {
+		http.Error(w, "invalid card id", http.StatusBadRequest)
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if card.BoardID != board.ID {
+		http.NotFound(w, r)
+		return
+	}
+	a.renderCardModal(w, r, board, card, user)
+}
+
+func (a *App) handleGetCardByID(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	cardID, err := parseID(chi.URLParam(r, "cardID"))
+	if err != nil {
+		http.Error(w, "invalid card id", http.StatusBadRequest)
+		return
+	}
+	card, err := a.cards.Get(cardID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	board, err := a.boards.Get(card.BoardID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	a.renderCardModal(w, r, board, card, user)
 }
 
 func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {

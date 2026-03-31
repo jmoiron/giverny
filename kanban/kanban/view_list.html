@@ -1,0 +1,30 @@
+<div class="card-list-wrap page-wrap view-list-wrap">
+    <div class="card-list-header">
+        <div class="card-list-heading">
+            <h2>views</h2>
+        </div>
+    </div>
+
+    <table class="admin-table view-list-table">
+        <thead>
+            <tr>
+                <th>title</th>
+                <th>description</th>
+                <th>created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .views}}
+            <tr>
+                <td><a class="card-list-board-link" href="/cards/views/{{.Slug}}/">{{.Name}}</a></td>
+                <td>{{.Description}}</td>
+                <td>{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="3" class="empty-table-copy">no saved views yet</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>

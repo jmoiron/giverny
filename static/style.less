@@ -32,8 +32,17 @@ main {
     padding: 1.5rem 1rem;
 }
 
+.page-wrap > h2:first-child,
+.admin-wrap > h2:first-child {
+    margin-top: 0;
+}
+
 a { color: var(--link); }
 a:hover { color: var(--accent); }
+
+.hidden {
+    display: none !important;
+}
 
 .color-picker-panel {
     background: color-mix(in srgb, var(--surface) 82%, var(--hover-bg) 18%);
@@ -143,6 +152,7 @@ a:hover { color: var(--accent); }
         font-size: 0.95rem;
         font-weight: 600;
         color: var(--text);
+        text-decoration: none;
         margin-bottom: 0.15rem;
 
         .side-nav-icon {
@@ -151,6 +161,11 @@ a:hover { color: var(--accent); }
             color: var(--muted);
             flex-shrink: 0;
         }
+    }
+
+    a.side-nav-section-label:hover {
+        color: var(--text);
+        background: var(--hover-bg);
     }
 
     .side-nav-boards {

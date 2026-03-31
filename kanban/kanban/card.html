@@ -14,7 +14,7 @@
     <a href="#" class="modal-close" id="card-modal-close" aria-label="close">
         <i class="fa-solid fa-xmark"></i>
     </a>
-    <form id="card-detail-form" data-id="{{.card.ID}}" data-can-edit="{{if .canEdit}}1{{else}}0{{end}}">
+    <form id="card-detail-form" data-id="{{.card.ID}}" data-board-slug="{{.board.Slug}}" data-can-edit="{{if .canEdit}}1{{else}}0{{end}}">
         <input type="hidden" name="color" value="{{.card.Color}}">
         <div class="card-detail-layout">
             <div class="card-main-pane">

@@ -129,6 +129,16 @@ type Attachment struct {
 	IconClass  string    `db:"-"`
 }
 
+type CardView struct {
+	ID          int64     `db:"id"`
+	UserID      int64     `db:"user_id"`
+	Name        string    `db:"name"`
+	Slug        string    `db:"slug"`
+	Description string    `db:"description"`
+	QueryString string    `db:"query_string"`
+	CreatedAt   time.Time `db:"created_at"`
+}
+
 type Activity struct {
 	ID        int64     `db:"id"`
 	BoardID   int64     `db:"board_id"`
@@ -406,6 +416,32 @@ var ActivityMigrations = monarch.Set{
 				created_at DATETIME DEFAULT (datetime('now'))
 			);`,
 			Down: `DROP TABLE activity;`,
+		},
+	},
+}
+
+var CardViewMigrations = monarch.Set{
+	Name: "card_view",
+	Migrations: []monarch.Migration{
+		{
+			Up: `CREATE TABLE IF NOT EXISTS card_view (
+				id INTEGER NOT NULL PRIMARY KEY,
+				user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+				name TEXT NOT NULL,
+				slug TEXT NOT NULL DEFAULT '',
+				description TEXT NOT NULL DEFAULT '',
+				query_string TEXT NOT NULL DEFAULT '',
+				created_at DATETIME DEFAULT (datetime('now'))
+			);`,
+			Down: `DROP TABLE card_view;`,
+		},
+		{
+			Up:   `UPDATE card_view SET slug = 'view-' || id WHERE slug = '';`,
+			Down: ``,
+		},
+		{
+			Up:   `CREATE UNIQUE INDEX IF NOT EXISTS card_view_user_slug_idx ON card_view(user_id, slug);`,
+			Down: `DROP INDEX IF EXISTS card_view_user_slug_idx;`,
 		},
 	},
 }

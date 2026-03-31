@@ -93,6 +93,9 @@
 .fa-bell {
   --fa: "\f0f3";
 }
+.fa-bookmark {
+  --fa: "\f02e";
+}
 .fa-calendar {
   --fa: "\f133";
 }
@@ -134,6 +137,9 @@
 }
 .fa-file {
   --fa: "\f15b";
+}
+.fa-filter {
+  --fa: "\f0b0";
 }
 .fa-floppy-disk {
   --fa: "\f0c7";
@@ -186,6 +192,15 @@
 .fa-right-to-bracket {
   --fa: "\f2f6";
 }
+.fa-sort {
+  --fa: "\f0dc";
+}
+.fa-sort-down {
+  --fa: "\f0dd";
+}
+.fa-sort-up {
+  --fa: "\f0de";
+}
 .fa-square {
   --fa: "\f0c8";
 }
@@ -194,6 +209,9 @@
 }
 .fa-table-columns {
   --fa: "\f0db";
+}
+.fa-table-list {
+  --fa: "\f00b";
 }
 .fa-tag {
   --fa: "\f02b";

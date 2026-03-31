@@ -51,3 +51,9 @@ fa-regular fa-clock
 fa-regular fa-handshake
 fa-regular fa-copy
 fa-solid fa-trash-can
+fa-solid fa-table-list
+fa-solid fa-sort
+fa-solid fa-sort-up
+fa-solid fa-sort-down
+fa-solid fa-filter
+fa-solid fa-bookmark

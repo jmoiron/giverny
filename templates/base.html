@@ -34,6 +34,10 @@
                     <i class="fa-solid fa-table-columns"></i>
                     <span>boards</span>
                 </a>
+                <a href="/cards/" class="nav-link">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>list</span>
+                </a>
                 {{if .user.IsAdmin}}
                 <a href="/labels/" class="nav-link">
                     <i class="fa-solid fa-tags"></i>
@@ -92,15 +96,15 @@
             {{if .user}}
             <nav id="side-nav">
                 <div class="side-nav-inner">
-                    <a href="#" class="side-nav-item">
+                    <a href="/cards/my-tasks/" class="side-nav-item">
                         <i class="fa-solid fa-user side-nav-icon"></i>
                         <span>my tasks</span>
                     </a>
-                    <a href="#" class="side-nav-item">
+                    <a href="/cards/subscribed/" class="side-nav-item">
                         <i class="fa-solid fa-bell side-nav-icon"></i>
                         <span>subscribed</span>
                     </a>
-                    <a href="#" class="side-nav-item">
+                    <a href="/cards/in-progress/" class="side-nav-item">
                         <i class="fa-regular fa-clock side-nav-icon"></i>
                         <span>in progress</span>
                     </a>
@@ -109,6 +113,11 @@
                         <span>boards</span>
                     </div>
                     <div class="side-nav-boards" id="side-nav-boards"></div>
+                    <a href="/cards/views/" class="side-nav-section-label side-nav-views-label hidden" id="side-nav-views-label">
+                        <i class="fa-solid fa-bookmark side-nav-icon"></i>
+                        <span>views</span>
+                    </a>
+                    <div class="side-nav-boards" id="side-nav-views"></div>
                 </div>
             </nav>
             {{end}}

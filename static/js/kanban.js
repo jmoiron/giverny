@@ -1,7 +1,11 @@
 $(function() {
     var board = $('#board-outer').data('slug');
-    if (!board) return;
+    var cardPermalinksEnabled = !!board || $('.card-list-wrap').length > 0;
     var DEFAULT_LABEL_COLOR = '#888888';
+
+    function cardBoard($form) {
+        return ($form && $form.data('board-slug')) || board || '';
+    }
     var collapsedColumnsKey = 'giverny:collapsed-columns:' + board;
     var activeLabelIndex = -1;
     var visibleLabelMatches = [];
@@ -615,7 +619,7 @@ $(function() {
         var cardId = $form.data('id');
         var filename = $row.find('.card-attachment-rename-input').val().trim();
         if (!filename) return;
-        post('/boards/' + board + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/rename', { filename: filename })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/rename', { filename: filename })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -1189,7 +1193,8 @@ $(function() {
     }
 
     function persistAddLabel(cardId, label) {
-        return post('/boards/' + board + '/cards/' + cardId + '/labels', { label_id: label.id })
+        var $form = $('#card-detail-form');
+        return post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/labels', { label_id: label.id })
             .then(function(r) { return r.json(); })
             .then(function() {
                 attachLabelToEditor(label);
@@ -1463,13 +1468,16 @@ $(function() {
 
     // Close if clicking outside the status box.
     $(document).on('click', function(e) {
-        if (!$('#ws-status-box')[0].contains(e.target)) {
+        var box = $('#ws-status-box')[0];
+        if (box && !box.contains(e.target)) {
             $wsEventLog.hide();
         }
     });
 
-    applyCollapsedColumns();
-    connectWS();
+    if (board) {
+        applyCollapsedColumns();
+        connectWS();
+    }
 
     // --- Add column toggle ---
     $('#add-column-btn').on('click', function() {
@@ -1636,10 +1644,10 @@ $(function() {
         return match ? Number(match[1]) : 0;
     }
 
-    function openCardModal(cardId, syncHash) {
+    function openCardModal(cardId, syncHash, boardSlug) {
         cardId = Number(cardId || 0);
         if (!cardId) return;
-        if (syncHash !== false) {
+        if (syncHash !== false && cardPermalinksEnabled) {
             var nextHash = cardHash(cardId);
             if (window.location.hash !== nextHash) {
                 window.location.hash = nextHash;
@@ -1647,7 +1655,8 @@ $(function() {
             }
         }
         var requestID = ++cardModalRequestID;
-        fetch('/boards/' + board + '/cards/' + cardId)
+        var url = boardSlug ? ('/boards/' + boardSlug + '/cards/' + cardId) : ('/cards/' + cardId + '/');
+        fetch(url)
             .then(function(r) { return r.text(); })
             .then(function(html) {
                 if (requestID !== cardModalRequestID) return;
@@ -1673,15 +1682,21 @@ $(function() {
         cardModalRequestID++;
         resetAttachmentOverlay();
         $cardModal.removeClass('active');
-        if (syncHash !== false && hashCardID()) {
+        if (syncHash !== false && cardPermalinksEnabled && hashCardID()) {
             history.replaceState(null, '', window.location.pathname + window.location.search);
         }
     }
 
+    window.closeActiveCardModal = function() {
+        if (!$cardModal.hasClass('active')) return false;
+        closeCardModal(true);
+        return true;
+    };
+
     function syncCardModalToHash() {
         var cardId = hashCardID();
         if (cardId) {
-            openCardModal(cardId, false);
+            openCardModal(cardId, false, board);
             return;
         }
         closeCardModal(false);
@@ -1697,7 +1712,7 @@ $(function() {
         updateAttachmentOverlayProgress('uploading attachment', file.name || '', 0);
         return new Promise(function(resolve, reject) {
             var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/boards/' + board + '/cards/' + cardId + '/attachments');
+            xhr.open('POST', '/boards/' + cardBoard($form) + '/cards/' + cardId + '/attachments');
             xhr.responseType = 'json';
             xhr.upload.onprogress = function(ev) {
                 if (!ev.lengthComputable) return;
@@ -1736,7 +1751,9 @@ $(function() {
         }, Promise.resolve());
     }
 
-    window.addEventListener('hashchange', syncCardModalToHash);
+    if (cardPermalinksEnabled) {
+        window.addEventListener('hashchange', syncCardModalToHash);
+    }
 
     document.addEventListener('dragover', function(ev) {
         var dt = ev.dataTransfer;
@@ -1774,12 +1791,21 @@ $(function() {
         uploadCardAttachments(dt.files);
     }, true);
 
-    $(document).on('click', '.kanban-card', function() {
-        if (shouldSuppressCardClick()) return;
-        openCardModal($(this).data('id'), true);
+    if (board) {
+        $(document).on('click', '.kanban-card', function() {
+            if (shouldSuppressCardClick()) return;
+            openCardModal($(this).data('id'), true);
+        });
+    }
+
+    $(document).on('click', '.card-list-title-link', function(e) {
+        e.preventDefault();
+        openCardModal($(this).data('card-id'), true);
     });
 
-    syncCardModalToHash();
+    if (cardPermalinksEnabled) {
+        syncCardModalToHash();
+    }
 
     document.addEventListener('dragstart', function(ev) {
         var checklistItem = ev.target.closest('.checklist-item');
@@ -1920,7 +1946,8 @@ $(function() {
             }
             var itemIDs = checklistItemIDs();
             if (itemIDs.length) {
-                postJSON('/boards/' + board + '/cards/' + $('#card-detail-form').data('id') + '/checklist/reorder', itemIDs);
+                var $clForm = $('#card-detail-form');
+                postJSON('/boards/' + cardBoard($clForm) + '/cards/' + $clForm.data('id') + '/checklist/reorder', itemIDs);
             }
             $(checklistDragState.draggedEl).removeClass('dragging-source');
             if (checklistDragState.placeholder) $(checklistDragState.placeholder).remove();
@@ -2129,7 +2156,7 @@ $(function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
         var userId = $(this).data('user-id');
-        post('/boards/' + board + '/cards/' + cardId + '/assign', {
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/assign', {
             assignee_id: userId
         })
             .then(function(r) { return r.json(); })
@@ -2145,7 +2172,7 @@ $(function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
         var userId = $(this).closest('.card-assignee-pill').data('user-id');
-        post('/boards/' + board + '/cards/' + cardId + '/assignees/' + userId + '/delete', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/assignees/' + userId + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2157,7 +2184,7 @@ $(function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
         var color = $(this).attr('data-color') || '';
-        post('/boards/' + board + '/cards/' + cardId + '/color', { color: color })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/color', { color: color })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2171,7 +2198,7 @@ $(function() {
     $(document).on('input change', '#card-color-custom', function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/color', { color: $(this).val() })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/color', { color: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2181,7 +2208,7 @@ $(function() {
     $(document).on('click', '#card-done-btn', function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/done', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/done', {})
             .then(function(r) { return r.json(); })
             .then(function(payload) {
                 if (payload && payload.to_column_id) {
@@ -2200,7 +2227,7 @@ $(function() {
         var $form = $btn.closest('#card-detail-form');
         var cardId = $form.data('id');
         var next = $btn.attr('data-subscribed') === '1' ? '0' : '1';
-        post('/boards/' + board + '/cards/' + cardId + '/subscribe', { subscribed: next })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/subscribe', { subscribed: next })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var subscribed = !!data.subscribed;
@@ -2225,7 +2252,7 @@ $(function() {
     $(document).on('change', '#card-due-date-input', function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/due-date', { date: $(this).val() })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/due-date', { date: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2235,7 +2262,7 @@ $(function() {
     $(document).on('change', '#card-start-date-input', function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/start-date', { date: $(this).val() })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/start-date', { date: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2245,9 +2272,17 @@ $(function() {
     $(document).on('click', '.label-remove-btn', function(e) {
         e.preventDefault();
         var $pill = $(this).closest('.label-pill');
-        var cardId = $(this).closest('#card-detail-form').data('id');
+        var $form = $(this).closest('#card-detail-form');
+        if (!$form.length) {
+            if ($pill.closest('#card-list-selected-labels').length) {
+                $pill.remove();
+                $('#card-list-selected-labels').toggleClass('is-empty', $('#card-list-selected-labels .label-pill').length === 0);
+            }
+            return;
+        }
+        var cardId = $form.data('id');
         var labelId = $pill.data('label-id');
-        post('/boards/' + board + '/cards/' + cardId + '/labels/' + labelId + '/delete', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/labels/' + labelId + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function() {
                 $pill.remove();
@@ -2260,10 +2295,10 @@ $(function() {
         if (e.key !== 'Enter') return;
         e.preventDefault();
         var text = $(this).val().trim();
-        var cardId = $(this).closest('#card-detail-form').data('id');
         var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
         if (!text) return;
-        post('/boards/' + board + '/cards/' + cardId + '/checklist/items', { text: text })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items', { text: text })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2273,9 +2308,9 @@ $(function() {
 
     $(document).on('change', '.checklist-item-toggle', function() {
         var $item = $(this).closest('.checklist-item');
-        var cardId = $(this).closest('#card-detail-form').data('id');
         var $form = $(this).closest('#card-detail-form');
-        post('/boards/' + board + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/done', {
+        var cardId = $form.data('id');
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/done', {
             done: this.checked ? '1' : '0'
         })
             .then(function(r) { return r.json(); })
@@ -2290,7 +2325,7 @@ $(function() {
         var $item = $(this).closest('.checklist-item');
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2347,7 +2382,7 @@ $(function() {
         var $row = $(this).closest('.card-attachment-row');
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/delete', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2360,10 +2395,10 @@ $(function() {
     });
 
     $(document).on('click', '#checklist-delete-btn', function() {
-        var cardId = $(this).closest('#card-detail-form').data('id');
         var $form = $(this).closest('#card-detail-form');
+        var cardId = $form.data('id');
         window.showConfirmModal('Delete this checklist?', function() {
-            post('/boards/' + board + '/cards/' + cardId + '/checklist/delete', {})
+            post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/delete', {})
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     applyCardMetaResponse($form, data);
@@ -2445,7 +2480,7 @@ $(function() {
         var cardId = $form.data('id');
         var body = $('#card-comment-textarea').val().trim();
         if (!body) return;
-        post('/boards/' + board + '/cards/' + cardId + '/comments', { body: body })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments', { body: body })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) return;
@@ -2501,7 +2536,7 @@ $(function() {
         var commentId = $comment.data('comment-id');
         var body = $comment.find('.card-comment-edit-area').val().trim();
         if (!body) return;
-        post('/boards/' + board + '/cards/' + cardId + '/comments/' + commentId + '/edit', { body: body })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments/' + commentId + '/edit', { body: body })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) return;
@@ -2519,7 +2554,7 @@ $(function() {
         var commentId = $comment.data('comment-id');
         $comment.find('.card-comment-menu').prop('hidden', true);
         window.showConfirmModal('Delete this comment?', function() {
-            post('/boards/' + board + '/cards/' + cardId + '/comments/' + commentId + '/delete', {})
+            post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments/' + commentId + '/delete', {})
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.ok) return;
@@ -2565,7 +2600,7 @@ $(function() {
         e.preventDefault();
         var $form = $(this);
         var cardId = $form.data('id');
-        post('/boards/' + board + '/cards/' + cardId, new URLSearchParams(new FormData(this)))
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId, new URLSearchParams(new FormData(this)))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.html) {
@@ -2587,15 +2622,16 @@ $(function() {
         var $form = $(this).closest('#card-detail-form');
         var cardId = $form.data('id');
         var colId = $(this).val();
-        post('/boards/' + board + '/cards/' + cardId + '/move', { column_id: colId, position: 0 })
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/move', { column_id: colId, position: 0 })
             .then(function() {});
     });
 
     // Archive card
     $(document).on('click', '#card-archive-btn', function() {
         var cardId = $(this).data('card-id');
+        var $form = $('#card-detail-form');
         var $card = $('.board-column:not(.archived-column) .kanban-card[data-id="' + cardId + '"]').first();
-        post('/boards/' + board + '/cards/' + cardId + '/archive', {})
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/archive', {})
             .then(function() {
                 var $archivedCards = $('#archived-cards');
                 if ($card.length && $archivedCards.length) {
@@ -2611,7 +2647,8 @@ $(function() {
 
     $(document).on('click', '#card-unarchive-btn', function() {
         var cardId = $(this).data('card-id');
-        post('/boards/' + board + '/cards/' + cardId + '/unarchive', {})
+        var $form = $('#card-detail-form');
+        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/unarchive', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.column_id && data.html) {
@@ -2625,8 +2662,9 @@ $(function() {
 
     $(document).on('click', '#card-delete-btn', function() {
         var cardId = $(this).data('card-id');
+        var $form = $('#card-detail-form');
         window.showConfirmModal('Delete this archived card permanently?', function() {
-            post('/boards/' + board + '/cards/' + cardId + '/delete', {})
+            post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/delete', {})
                 .then(function(r) { return r.json(); })
                 .then(function() {
                     $('#archived-cards .kanban-card[data-id="' + cardId + '"]').remove();
@@ -2635,4 +2673,549 @@ $(function() {
                 });
         });
     });
+
+    // --- Card list view ---
+    var $cardListTable = $('#card-list-table');
+    if ($cardListTable.length) {
+        var CARD_LIST_COLS_KEY = 'giverny:card-list-cols';
+        var DEFAULT_COLS = ['title', 'board', 'labels', 'created', 'updated', 'due'];
+        var ALL_OPTIONAL = ['board', 'labels', 'created', 'updated', 'due', 'column', 'done', 'start', 'subscribed', 'checklist'];
+        var filterLabelMatches = [];
+        var filterLabelIndex = -1;
+        var filterUserIndex = -1;
+        var filterColumnMatches = [];
+        var filterColumnIndex = -1;
+
+        function getVisibleCols() {
+            // Check URL param first (set when loading a saved view).
+            var params = new URLSearchParams(window.location.search);
+            var colsParam = params.get('cols');
+            if (colsParam) {
+                return colsParam.split(',').filter(Boolean);
+            }
+            var stored = localStorage.getItem(CARD_LIST_COLS_KEY);
+            if (stored) {
+                return stored.split(',').filter(Boolean);
+            }
+            return DEFAULT_COLS.slice();
+        }
+
+        function applyColVisibility(cols) {
+            var colSet = {};
+            cols.forEach(function(c) { colSet[c] = true; });
+            ALL_OPTIONAL.forEach(function(col) {
+                $cardListTable.toggleClass('show-col-' + col, !!colSet[col]);
+                var $cb = $('#cols-panel input[data-col="' + col + '"]');
+                if (!$cb.prop('disabled')) {
+                    $cb.prop('checked', !!colSet[col]);
+                }
+            });
+        }
+
+        function saveColVisibility() {
+            var cols = ['title', 'board'];
+            $('#cols-panel input[type=checkbox]').each(function() {
+                if (!$(this).prop('disabled') && $(this).prop('checked')) {
+                    cols.push($(this).data('col'));
+                }
+            });
+            localStorage.setItem(CARD_LIST_COLS_KEY, cols.join(','));
+            return cols;
+        }
+
+        // Initialize column visibility.
+        applyColVisibility(getVisibleCols());
+
+        function getCardListKnownLabels() {
+            var labels = [];
+            $('#card-list-known-labels .known-label-option').each(function() {
+                labels.push({
+                    id: Number($(this).data('label-id')),
+                    title: String($(this).data('title') || '').trim(),
+                    color: $(this).data('color') || DEFAULT_LABEL_COLOR,
+                    textClass: $(this).data('text-class') || labelTextClass($(this).data('color') || DEFAULT_LABEL_COLOR),
+                    description: $(this).data('description') || ''
+                });
+            });
+            return labels;
+        }
+
+        function getCardListKnownUsers() {
+            var users = [];
+            $('#card-list-known-users .known-user-option').each(function() {
+                users.push({
+                    id: Number($(this).data('user-id')),
+                    username: String($(this).data('username') || '').trim(),
+                    email: String($(this).data('email') || '').trim()
+                });
+            });
+            return users;
+        }
+
+        function getCardListKnownColumns() {
+            var cols = [];
+            $('#card-list-known-columns .known-column-option').each(function() {
+                cols.push(String($(this).data('name') || '').trim());
+            });
+            return cols;
+        }
+
+        function selectedFilterLabelExists(labelId) {
+            return $('#card-list-selected-labels .label-pill[data-label-id="' + labelId + '"]').length > 0;
+        }
+
+        function createFilterLabelPill(label) {
+            var $pill = $('<span class="label-pill selected"></span>');
+            $pill.addClass(label.textClass || labelTextClass(label.color || DEFAULT_LABEL_COLOR));
+            $pill.attr('data-label-id', label.id);
+            $pill.attr('style', '--label-color: ' + (label.color || DEFAULT_LABEL_COLOR));
+            if (label.description) $pill.attr('title', label.description);
+            $pill.append($('<span></span>').text(label.title));
+            $pill.append(
+                $('<a href="#" class="label-remove-btn"></a>')
+                    .attr('aria-label', 'remove ' + label.title + ' label')
+                    .append('<i class="fa-solid fa-circle-xmark"></i>')
+            );
+            $pill.append($('<input type="hidden" name="filter_label">').val(label.id));
+            return $pill;
+        }
+
+        function hideCardListLabelSuggestions() {
+            $('#card-list-label-suggestions').hide().empty();
+            filterLabelMatches = [];
+            filterLabelIndex = -1;
+        }
+
+        function renderCardListLabelSuggestions(query) {
+            var labels = getCardListKnownLabels();
+            var selectedIDs = {};
+            $('#card-list-selected-labels .label-pill').each(function() {
+                selectedIDs[String($(this).data('label-id'))] = true;
+            });
+            var trimmed = String(query || '').trim();
+            var matches = labels.filter(function(label) {
+                if (selectedIDs[String(label.id)]) return false;
+                if (!trimmed) return true;
+                var titleScore = fuzzyFieldScore(label.title, trimmed);
+                var descScore = fuzzyFieldScore(label.description || '', trimmed);
+                return titleScore >= 0 || descScore >= 0;
+            }).map(function(label) {
+                var titleScore = trimmed ? fuzzyFieldScore(label.title, trimmed) : 0;
+                var descScore = trimmed ? fuzzyFieldScore(label.description || '', trimmed) : 0;
+                var score = titleScore >= 0 ? titleScore : (descScore >= 0 ? descScore + 50 : 9999);
+                return { label: label, score: score };
+            }).sort(function(a, b) {
+                if (a.score !== b.score) return a.score - b.score;
+                return a.label.title.localeCompare(b.label.title);
+            }).slice(0, trimmed ? 8 : 5).map(function(entry) {
+                return entry.label;
+            });
+            filterLabelMatches = matches;
+            filterLabelIndex = -1;
+            var $list = $('#card-list-label-suggestions').empty();
+            if (!matches.length) {
+                $list.hide();
+                return;
+            }
+            matches.forEach(function(label) {
+                var $item = $('<button type="button" class="label-suggestion"></button>');
+                $item.attr('data-label-id', label.id);
+                $item.append(
+                    $('<span class="label-pill"></span>')
+                        .addClass(label.textClass || labelTextClass(label.color || DEFAULT_LABEL_COLOR))
+                        .attr('style', '--label-color: ' + (label.color || DEFAULT_LABEL_COLOR))
+                        .text(label.title)
+                );
+                if (label.description) {
+                    $item.append($('<div class="assign-suggestion-meta"></div>').text(label.description));
+                }
+                $list.append($item);
+            });
+            $list.show();
+        }
+
+        function attachFilterLabel(label) {
+            if (!label || !label.id || selectedFilterLabelExists(label.id)) return;
+            $('#card-list-selected-labels').append(createFilterLabelPill(label)).removeClass('is-empty');
+            $('#card-list-label-input').val('').trigger('focus');
+            hideCardListLabelSuggestions();
+        }
+
+        function hideFilterColumnSuggestions() {
+            $('#filter-col-suggestions').hide().empty();
+            filterColumnMatches = [];
+            filterColumnIndex = -1;
+        }
+
+        function renderFilterColumnSuggestions(query) {
+            var trimmed = String(query || '').trim();
+            var matches = getCardListKnownColumns().filter(function(name) {
+                if (!trimmed) return true;
+                return fuzzyFieldScore(name, trimmed) >= 0;
+            }).sort(function(a, b) {
+                var as = trimmed ? fuzzyFieldScore(a, trimmed) : 0;
+                var bs = trimmed ? fuzzyFieldScore(b, trimmed) : 0;
+                if (as !== bs) return as - bs;
+                return a.localeCompare(b);
+            }).slice(0, trimmed ? 8 : 5);
+            filterColumnMatches = matches;
+            filterColumnIndex = -1;
+            var $list = $('#filter-col-suggestions').empty();
+            if (!matches.length) {
+                $list.hide();
+                return;
+            }
+            matches.forEach(function(name) {
+                var $item = $('<button type="button" class="label-suggestion"></button>');
+                $item.attr('data-name', name);
+                $item.text(name);
+                $list.append($item);
+            });
+            $list.show();
+        }
+
+        function renderFilterUserSuggestions($picker, query) {
+            $('.filter-user-suggestions').not($picker.find('.filter-user-suggestions')).hide();
+            var users = getCardListKnownUsers();
+            var trimmed = String(query || '').trim();
+            var matches = users.filter(function(user) {
+                if (!trimmed) return true;
+                return fuzzyFieldScore(user.username, trimmed) >= 0 || fuzzyFieldScore(user.email, trimmed) >= 0;
+            }).map(function(user) {
+                var userScore = trimmed ? fuzzyFieldScore(user.username, trimmed) : 0;
+                var emailScore = trimmed ? fuzzyFieldScore(user.email, trimmed) : 0;
+                var score = userScore >= 0 ? userScore : (emailScore >= 0 ? emailScore + 50 : 9999);
+                return { user: user, score: score };
+            }).sort(function(a, b) {
+                if (a.score !== b.score) return a.score - b.score;
+                return a.user.username.localeCompare(b.user.username);
+            }).slice(0, trimmed ? 8 : 5).map(function(entry) {
+                return entry.user;
+            });
+            var $list = $picker.find('.filter-user-suggestions').empty();
+            $list.append(
+                $('<button type="button" class="assign-suggestion"></button>')
+                    .attr('data-user-id', '')
+                    .append($('<span class="assign-suggestion-name"></span>').text('anyone'))
+            );
+            if ($picker.attr('data-target') === 'filter_user') {
+                $list.append(
+                    $('<button type="button" class="assign-suggestion"></button>')
+                        .attr('data-user-id', '__unassigned__')
+                        .append($('<span class="assign-suggestion-name"></span>').text('unassigned'))
+                );
+            } else if ($picker.attr('data-target') === 'filter_subscribed') {
+                $list.append(
+                    $('<button type="button" class="assign-suggestion"></button>')
+                        .attr('data-user-id', '__unsubscribed__')
+                        .append($('<span class="assign-suggestion-name"></span>').text('no subscribers'))
+                );
+            }
+            matches.forEach(function(user, idx) {
+                var $item = $('<button type="button" class="assign-suggestion"></button>');
+                if (idx === filterUserIndex - 1 && filterUserIndex > 0) $item.addClass('active');
+                $item.attr('data-user-id', user.id);
+                $item.append($('<span class="assign-suggestion-name"></span>').text(user.username));
+                if (user.email) $item.append($('<span class="assign-suggestion-meta"></span>').text(user.email));
+                $list.append($item);
+            });
+            $list.show();
+            filterUserIndex = -1;
+        }
+
+        function syncFilterUserInput($picker) {
+            var currentId = Number($picker.find('input[type=hidden]').val() || 0);
+            var currentRaw = String($picker.find('input[type=hidden]').val() || '');
+            if (currentRaw === '__unassigned__') {
+                $picker.find('.filter-user-input').val('unassigned');
+                return;
+            }
+            if (currentRaw === '__unsubscribed__') {
+                $picker.find('.filter-user-input').val('no subscribers');
+                return;
+            }
+            var user = null;
+            getCardListKnownUsers().forEach(function(candidate) {
+                if (candidate.id === currentId) user = candidate;
+            });
+            $picker.find('.filter-user-input').val(user ? user.username : '');
+        }
+
+        // Column panel toggle.
+        var $colsToggle = $('#cols-toggle');
+        var $colsPanel = $('#cols-panel');
+        $colsToggle.on('click', function(e) {
+            e.preventDefault();
+            $colsPanel.toggleClass('hidden');
+            $colsToggle.toggleClass('active');
+        });
+
+        // Column checkbox changes.
+        $colsPanel.on('change', 'input[type=checkbox]', function() {
+            saveColVisibility();
+            var col = $(this).data('col');
+            $cardListTable.toggleClass('show-col-' + col, $(this).prop('checked'));
+        });
+
+        // Filter panel toggle.
+        var $filterToggle = $('#filter-toggle');
+        var $filterPanel = $('#filter-panel');
+        $filterToggle.on('click', function(e) {
+            e.preventDefault();
+            $filterPanel.toggleClass('hidden');
+            $filterToggle.toggleClass('active');
+        });
+
+        syncFilterUserInput($('.filter-user-picker[data-target="filter_user"]'));
+        syncFilterUserInput($('.filter-user-picker[data-target="filter_subscribed"]'));
+
+        $('#filter-label-match-toggle').on('change', function() {
+            $('#filter-label-match-input').val(this.checked ? 'all' : 'any');
+            $('#filter-label-match-copy').text('match: ' + (this.checked ? 'all' : 'any'));
+        });
+
+        $('#card-list-label-input').on('focus input', function() {
+            renderCardListLabelSuggestions($(this).val());
+        }).on('keydown', function(e) {
+            if (!filterLabelMatches.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                filterLabelIndex = (filterLabelIndex + 1) % filterLabelMatches.length;
+                $('#card-list-label-suggestions .label-suggestion').removeClass('active').eq(filterLabelIndex).addClass('active');
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                filterLabelIndex = (filterLabelIndex <= 0 ? filterLabelMatches.length - 1 : filterLabelIndex - 1);
+                $('#card-list-label-suggestions .label-suggestion').removeClass('active').eq(filterLabelIndex).addClass('active');
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filterLabelIndex >= 0 && filterLabelMatches[filterLabelIndex]) {
+                    attachFilterLabel(filterLabelMatches[filterLabelIndex]);
+                }
+            } else if (e.key === 'Escape') {
+                hideCardListLabelSuggestions();
+            }
+        });
+
+        $(document).on('click', '#card-list-label-suggestions .label-suggestion', function() {
+            var labelId = Number($(this).data('label-id'));
+            var label = null;
+            getCardListKnownLabels().forEach(function(candidate) {
+                if (candidate.id === labelId) label = candidate;
+            });
+            attachFilterLabel(label);
+        });
+
+        $('#filter-col-input').on('focus input', function() {
+            var value = $(this).val();
+            $('#filter-col-value').val(value);
+            renderFilterColumnSuggestions(value);
+        }).on('keydown', function(e) {
+            if (!filterColumnMatches.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                filterColumnIndex = (filterColumnIndex + 1) % filterColumnMatches.length;
+                $('#filter-col-suggestions .label-suggestion').removeClass('active').eq(filterColumnIndex).addClass('active');
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                filterColumnIndex = (filterColumnIndex <= 0 ? filterColumnMatches.length - 1 : filterColumnIndex - 1);
+                $('#filter-col-suggestions .label-suggestion').removeClass('active').eq(filterColumnIndex).addClass('active');
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filterColumnIndex >= 0 && filterColumnMatches[filterColumnIndex]) {
+                    $('#filter-col-input').val(filterColumnMatches[filterColumnIndex]);
+                    $('#filter-col-value').val(filterColumnMatches[filterColumnIndex]);
+                    hideFilterColumnSuggestions();
+                }
+            } else if (e.key === 'Escape') {
+                hideFilterColumnSuggestions();
+            }
+        });
+
+        $(document).on('click', '#filter-col-suggestions .label-suggestion', function() {
+            var name = String($(this).attr('data-name') || '');
+            $('#filter-col-input').val(name);
+            $('#filter-col-value').val(name);
+            hideFilterColumnSuggestions();
+        });
+
+        $(document).on('focus input', '.filter-user-input', function() {
+            var $picker = $(this).closest('.filter-user-picker');
+            if (!$(this).val().trim()) {
+                $picker.find('input[type=hidden]').val('');
+                $picker.attr('data-unassigned', '0');
+                $picker.attr('data-unsubscribed', '0');
+            }
+            renderFilterUserSuggestions($picker, $(this).val());
+        });
+
+        $(document).on('keydown', '.filter-user-input', function(e) {
+            var $picker = $(this).closest('.filter-user-picker');
+            var $items = $picker.find('.assign-suggestion');
+            if (!$items.length) return;
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                filterUserIndex = filterUserIndex < 0 ? 0 : filterUserIndex;
+                filterUserIndex += e.key === 'ArrowDown' ? 1 : -1;
+                if (filterUserIndex < 0) filterUserIndex = $items.length - 1;
+                if (filterUserIndex >= $items.length) filterUserIndex = 0;
+                $items.removeClass('active').eq(filterUserIndex).addClass('active');
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                var $active = $items.filter('.active').first();
+                if (!$active.length) $active = $items.first();
+                $active.trigger('click');
+            } else if (e.key === 'Escape') {
+                $picker.find('.filter-user-suggestions').hide();
+            }
+        });
+
+        $(document).on('click', '.filter-user-picker .assign-suggestion', function() {
+            var $picker = $(this).closest('.filter-user-picker');
+            var userId = String($(this).attr('data-user-id') || '');
+            var username = $(this).find('span').first().text();
+            $picker.find('input[type=hidden]').val(userId);
+            $picker.attr('data-unassigned', userId === '__unassigned__' ? '1' : '0');
+            $picker.attr('data-unsubscribed', userId === '__unsubscribed__' ? '1' : '0');
+            $picker.find('.filter-user-input').val(userId ? username : '');
+            $picker.find('.filter-user-suggestions').hide();
+        });
+
+        function currentCardListQuery() {
+            var currentQuery = String($('.card-list-wrap').attr('data-current-query-string') || '');
+            var params = new URLSearchParams(currentQuery);
+            var visibleCols = saveColVisibility();
+            params.set('cols', visibleCols.join(','));
+            return params.toString();
+        }
+
+        function setViewEditMode(editing) {
+            $('#card-list-view-display').toggleClass('hidden', editing);
+            $('#card-list-view-edit-form').toggleClass('hidden', !editing);
+            if (editing) {
+                $('#card-list-view-name-input').trigger('focus').trigger('select');
+            }
+        }
+
+        function saveActiveView() {
+            var viewId = String($('.card-list-wrap').attr('data-view-id') || '');
+            if (!viewId) return;
+            var editing = !$('#card-list-view-edit-form').hasClass('hidden');
+            var name = editing ? $('#card-list-view-name-input').val().trim() : $('#card-list-view-title').text().trim();
+            if (!name) return;
+            var description = editing ? $('#card-list-view-description-input').val().trim() : $('#card-list-view-description').text().trim();
+            var qs = currentCardListQuery();
+            fetch('/api/views/' + viewId + '/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'name=' + encodeURIComponent(name) +
+                    '&description=' + encodeURIComponent(description) +
+                    '&query_string=' + encodeURIComponent(qs)
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(v) {
+                    if (!v.slug) return;
+                    window.location = '/cards/views/' + v.slug + '/';
+                })
+                .catch(function() {});
+        }
+
+        // Bookmark dropdown toggle.
+        var $bookmarkToggle = $('#bookmark-toggle');
+        var $bookmarkDropdown = $('#bookmark-dropdown');
+        $bookmarkToggle.on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $bookmarkDropdown.toggleClass('open');
+        });
+
+        var $viewActions = $('#view-actions');
+        $('#view-actions-toggle').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $viewActions.toggleClass('open');
+        });
+
+        $('#view-edit-action').on('click', function(e) {
+            e.preventDefault();
+            $viewActions.removeClass('open');
+            setViewEditMode(true);
+        });
+
+        $('#view-save-action').on('click', function(e) {
+            e.preventDefault();
+            saveActiveView();
+        });
+
+        $('#view-edit-save').on('click', function(e) {
+            e.preventDefault();
+            saveActiveView();
+        });
+
+        $('#view-edit-cancel').on('click', function(e) {
+            e.preventDefault();
+            setViewEditMode(false);
+            $('#card-list-view-name-input').val($('#card-list-view-title').text().trim());
+            $('#card-list-view-description-input').val($('#card-list-view-description').text().trim());
+        });
+
+        $('#view-delete-action').on('click', function(e) {
+            e.preventDefault();
+            var viewId = String($('.card-list-wrap').attr('data-view-id') || '');
+            if (!viewId) return;
+            window.showConfirmModal('Delete this saved view?', function() {
+                fetch('/api/views/' + viewId + '/delete', { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res && res.ok) window.location = '/cards/views/';
+                    })
+                    .catch(function() {});
+            });
+        });
+
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.card-list-action-wrap').length) {
+                $bookmarkDropdown.removeClass('open');
+                $viewActions.removeClass('open');
+            }
+            if (!$(e.target).closest('.filter-label-picker').length) {
+                hideCardListLabelSuggestions();
+            }
+            if (!$(e.target).closest('.filter-column-picker').length) {
+                hideFilterColumnSuggestions();
+            }
+            if (!$(e.target).closest('.filter-user-picker').length) {
+                $('.filter-user-suggestions').hide();
+            }
+        });
+
+        // Save view form.
+        $('#save-view-form').on('submit', function(e) {
+            e.preventDefault();
+            var name = $('#save-view-name').val().trim();
+            if (!name) return;
+            fetch('/api/views/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'name=' + encodeURIComponent(name) +
+                    '&query_string=' + encodeURIComponent(currentCardListQuery())
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(v) {
+                    if (!v.id) return;
+                    // Add to side nav views list.
+                    var $label = $('#side-nav-views-label');
+                    var $list = $('#side-nav-views');
+                    $label.removeClass('hidden');
+                    var $a = $('<a class="side-nav-board-link"></a>');
+                    $a.attr('href', '/cards/views/' + v.slug + '/');
+                    $a.text(v.name);
+                    $list.prepend($a);
+                    $list.children().slice(10).remove();
+                    // Reset form and close dropdown.
+                    $('#save-view-name').val('');
+                    $bookmarkDropdown.removeClass('open');
+                })
+                .catch(function() {});
+        });
+    }
 });

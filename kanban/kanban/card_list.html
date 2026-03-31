@@ -1,0 +1,258 @@
+<div class="card-list-wrap page-wrap" data-current-query-string="{{.currentQueryString}}"{{with .activeView}} data-view-id="{{.ID}}" data-view-slug="{{.Slug}}"{{end}}>
+    <div class="card-list-header">
+        <div class="card-list-heading">
+            {{with .activeView}}
+            <div class="card-list-view-display" id="card-list-view-display">
+                <h2 id="card-list-view-title">{{.Name}}</h2>
+                {{if .Description}}<p class="card-list-description" id="card-list-view-description">{{.Description}}</p>{{else}}<p class="card-list-description hidden" id="card-list-view-description"></p>{{end}}
+            </div>
+            <form class="card-list-view-edit hidden" id="card-list-view-edit-form">
+                <input type="text" id="card-list-view-name-input" value="{{.Name}}" placeholder="view name" required>
+                <textarea id="card-list-view-description-input" rows="3" placeholder="description">{{.Description}}</textarea>
+                <div class="action-links-row">
+                    <a href="#" id="view-edit-cancel">cancel</a>
+                    <button type="button" id="view-edit-save">save</button>
+                </div>
+            </form>
+            {{else}}
+            <h2>{{if .pageTitle}}{{.pageTitle}}{{else}}cards{{end}}</h2>
+            {{end}}
+        </div>
+        <div class="card-list-header-actions">
+            <a href="#" class="card-list-action-link{{if .filterPanelOpen}} active{{end}}" id="filter-toggle" title="filter">
+                <i class="fa-solid fa-filter"></i>
+            </a>
+            <a href="#" class="card-list-action-link" id="cols-toggle" title="columns">
+                <i class="fa-solid fa-table-columns"></i>
+            </a>
+            {{if .activeView}}
+            <div class="card-list-action-wrap view-actions" id="view-actions">
+                <a href="#" class="card-list-action-link" id="view-actions-toggle" title="view actions">
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                </a>
+                <div class="col-dropdown" id="view-actions-dropdown">
+                    <button type="button" class="col-dropdown-item" id="view-edit-action">edit</button>
+                    <button type="button" class="col-dropdown-item" id="view-save-action">save</button>
+                    <button type="button" class="col-dropdown-item danger" id="view-delete-action">delete</button>
+                </div>
+            </div>
+            {{else}}
+            <div class="card-list-action-wrap">
+                <a href="#" class="card-list-action-link" id="bookmark-toggle" title="save view">
+                    <i class="fa-solid fa-bookmark"></i>
+                </a>
+                <div class="card-list-bookmark-dropdown" id="bookmark-dropdown">
+                    <form id="save-view-form">
+                        <input type="text" id="save-view-name" placeholder="view name" required>
+                        <button type="submit">save</button>
+                    </form>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="card-list-panel{{if not .filterPanelOpen}} hidden{{end}}" id="filter-panel">
+        <form method="get" action="{{.listPath}}" class="filter-form">
+            <input type="hidden" name="sort" value="{{.sort}}">
+            <input type="hidden" name="dir" value="{{.dir}}">
+            <div class="filter-search-row">
+                <div class="quick-section-title">search</div>
+                <input type="text" class="filter-search-input" name="q" value="{{.filterQuery}}" placeholder="title, description, comments">
+            </div>
+            <div class="filter-groups">
+                <div class="filter-group">
+                    <div class="quick-section-title">board</div>
+                    <div class="filter-pair-row">
+                        <select class="filter-select" name="filter_board">
+                            <option value="">any board</option>
+                            {{range .boards}}<option value="{{.ID}}"{{if eq .ID $.filterBoard}} selected{{end}}>{{.Name}}</option>{{end}}
+                        </select>
+                        <div class="filter-column-picker">
+                            <input type="hidden" name="filter_col" id="filter-col-value" value="{{.filterCol}}">
+                            <input type="text" class="filter-column-input" id="filter-col-input" value="{{.filterCol}}" placeholder="any column">
+                            <div class="label-suggestions filter-column-suggestions" id="filter-col-suggestions" style="display:none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <div class="quick-section-title">labels</div>
+                    <div class="card-selected-labels{{if not .filterLabels}} is-empty{{end}}" id="card-list-selected-labels">
+                        {{range .labels}}
+                            {{$label := .}}
+                            {{range $.filterLabels}}
+                                {{if eq . $label.ID}}
+                                <span class="label-pill selected {{$label.TextClass}}" data-label-id="{{$label.ID}}" style="--label-color: {{$label.Color}}" title="{{$label.Description}}">
+                                    <span>{{$label.Title}}</span>
+                                    <a href="#" class="label-remove-btn" aria-label="remove {{$label.Title}} label">
+                                        <i class="fa-solid fa-circle-xmark"></i>
+                                    </a>
+                                    <input type="hidden" name="filter_label" value="{{$label.ID}}">
+                                </span>
+                                {{end}}
+                            {{end}}
+                        {{end}}
+                    </div>
+                    <div class="filter-group-label-row">
+                        <div class="card-label-picker filter-label-picker">
+                            <input type="text" id="card-list-label-input" placeholder="type to filter labels">
+                            <div class="label-suggestions" id="card-list-label-suggestions" style="display:none"></div>
+                        </div>
+                        <label class="filter-match-toggle">
+                            <input type="checkbox" id="filter-label-match-toggle"{{if .filterLabelMatchAll}} checked{{end}}>
+                            <span id="filter-label-match-copy">match: {{if .filterLabelMatchAll}}all{{else}}any{{end}}</span>
+                        </label>
+                    </div>
+                    <input type="hidden" name="filter_label_match" id="filter-label-match-input" value="{{if .filterLabelMatchAll}}all{{else}}any{{end}}">
+                </div>
+                <div class="filter-group">
+                    <div class="quick-section-title">people</div>
+                    <div class="filter-pair-row">
+                        <div class="filter-user-picker" data-target="filter_user" data-current-id="{{.filterUser}}" data-unassigned="{{if .filterUserUnassigned}}1{{else}}0{{end}}">
+                            <input type="hidden" name="filter_user" value="{{if .filterUserUnassigned}}__unassigned__{{else}}{{.filterUser}}{{end}}">
+                            <input type="text" class="filter-user-input" placeholder="assigned user">
+                            <div class="assign-suggestions filter-user-suggestions" style="display:none"></div>
+                        </div>
+                        <div class="filter-user-picker" data-target="filter_subscribed" data-current-id="{{.filterSub}}" data-unsubscribed="{{if .filterSubUnsubscribed}}1{{else}}0{{end}}">
+                            <input type="hidden" name="filter_subscribed" value="{{if .filterSubUnsubscribed}}__unsubscribed__{{else}}{{.filterSub}}{{end}}">
+                            <input type="text" class="filter-user-input" placeholder="subscribed user">
+                            <div class="assign-suggestions filter-user-suggestions" style="display:none"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <div class="quick-section-title">state</div>
+                    <div class="filter-pair-row filter-state-row">
+                        <select class="filter-select" name="filter_done_state">
+                            <option value="all"{{if eq .filterDoneState "all"}} selected{{end}}>all</option>
+                            <option value="done"{{if eq .filterDoneState "done"}} selected{{end}}>done</option>
+                            <option value="not_done"{{if eq .filterDoneState "not_done"}} selected{{end}}>not done</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button type="submit">apply</button>
+            </div>
+        </form>
+        <div id="card-list-known-labels" hidden>
+            {{range .labels}}
+            <div class="known-label-option"
+                 data-label-id="{{.ID}}"
+                 data-title="{{.Title}}"
+                 data-color="{{.Color}}"
+                 data-text-class="{{.TextClass}}"
+                 data-description="{{.Description}}"></div>
+            {{end}}
+        </div>
+        <div id="card-list-known-users" hidden>
+            {{range .users}}
+            <div class="known-user-option"
+                 data-user-id="{{.ID}}"
+                 data-username="{{.Username}}"
+                 data-email="{{.Email}}"></div>
+            {{end}}
+        </div>
+        <div id="card-list-known-columns" hidden>
+            {{range .columns}}
+            <div class="known-column-option" data-name="{{.Name}}"></div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="card-list-panel hidden" id="cols-panel">
+        <div class="cols-panel-inner">
+            <label class="col-check"><input type="checkbox" data-col="title" checked disabled><span>title</span></label>
+            <label class="col-check"><input type="checkbox" data-col="board" checked><span>board</span></label>
+            <label class="col-check"><input type="checkbox" data-col="labels" checked><span>labels</span></label>
+            <label class="col-check"><input type="checkbox" data-col="created" checked><span>created</span></label>
+            <label class="col-check"><input type="checkbox" data-col="updated" checked><span>updated</span></label>
+            <label class="col-check"><input type="checkbox" data-col="due" checked><span>due</span></label>
+            <label class="col-check"><input type="checkbox" data-col="column"><span>column</span></label>
+            <label class="col-check"><input type="checkbox" data-col="done"><span>done</span></label>
+            <label class="col-check"><input type="checkbox" data-col="start"><span>start</span></label>
+            <label class="col-check"><input type="checkbox" data-col="subscribed"><span>subscribed</span></label>
+            <label class="col-check"><input type="checkbox" data-col="checklist"><span>checklist</span></label>
+        </div>
+    </div>
+
+    <table class="admin-table card-list-table" id="card-list-table">
+        <thead>
+            <tr>
+                <th class="col-title">
+                    <a class="sort-link" href="{{index .sortURLs "title"}}">title
+                        {{if eq .sort "title"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-board">
+                    <a class="sort-link" href="{{index .sortURLs "board"}}">board
+                        {{if eq .sort "board"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-labels">labels</th>
+                <th class="col-created">
+                    <a class="sort-link" href="{{index .sortURLs "created"}}">created
+                        {{if eq .sort "created"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-updated">
+                    <a class="sort-link" href="{{index .sortURLs "updated"}}">updated
+                        {{if eq .sort "updated"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-due">
+                    <a class="sort-link" href="{{index .sortURLs "due"}}">due
+                        {{if eq .sort "due"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-column">
+                    <a class="sort-link" href="{{index .sortURLs "column"}}">column
+                        {{if eq .sort "column"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-done">
+                    <a class="sort-link" href="{{index .sortURLs "done"}}">done
+                        {{if eq .sort "done"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-start">
+                    <a class="sort-link" href="{{index .sortURLs "start"}}">start
+                        {{if eq .sort "start"}}{{if eq .dir "asc"}}<i class="fa-solid fa-sort-up sort-icon sort-active"></i>{{else}}<i class="fa-solid fa-sort-down sort-icon sort-active"></i>{{end}}{{else}}<i class="fa-solid fa-sort sort-icon"></i>{{end}}
+                    </a>
+                </th>
+                <th class="col-subscribed" title="subscribed"><i class="fa-solid fa-bell"></i></th>
+                <th class="col-checklist" title="checklist"><i class="fa-solid fa-list-check"></i></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .cards}}
+            <tr>
+                <td class="col-title">
+                    <div class="card-color-bar"{{if .Color}} style="border-left-color: {{.Color}}"{{end}}>
+                        <a class="card-list-title-link" href="#" data-card-id="{{.ID}}">{{.Title}}</a>
+                    </div>
+                </td>
+                <td class="col-board">
+                    <a class="card-list-board-link" href="/boards/{{.BoardSlug}}/">{{.BoardName}}</a>
+                </td>
+                <td class="col-labels">
+                    {{range .Labels}}<span class="label-pill {{.TextClass}}" style="--label-color: {{.Color}}">{{.Title}}</span>{{end}}
+                </td>
+                <td class="col-created">{{.CreatedAtDisplay}}</td>
+                <td class="col-updated">{{.UpdatedAtDisplay}}</td>
+                <td class="col-due">{{.DueDateDisplay}}</td>
+                <td class="col-column">{{.ColumnName}}</td>
+                <td class="col-done">{{if .ColumnDone}}<i class="fa-solid fa-check"></i>{{end}}</td>
+                <td class="col-start">{{.StartDateDisplay}}</td>
+                <td class="col-subscribed">{{if .Subscribed}}<i class="fa-solid fa-bell"></i>{{end}}</td>
+                <td class="col-checklist">{{if .ChecklistTotal}}{{.ChecklistDone}}/{{.ChecklistTotal}}{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{with .activeView}}
+    <div class="card-list-view-created">{{.CreatedAt.Format "Jan 2, 2006"}}</div>
+    {{end}}
+</div>
+
+{{.cardModalShell}}
