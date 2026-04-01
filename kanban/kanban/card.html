@@ -1,4 +1,4 @@
-<div class="card-detail{{if .card.Color}} has-card-color{{end}}" data-card-id="{{.card.ID}}" data-card-color="{{.card.Color}}">
+<div class="card-detail{{if .card.Color}} has-card-color{{end}}" data-card-id="{{.card.ID}}" data-card-color="{{.card.Color}}" data-board-slug="{{.board.Slug}}" data-can-edit="{{if .canEdit}}1{{else}}0{{end}}">
     <div class="card-upload-overlay is-hidden" id="card-upload-overlay">
         <div class="card-upload-overlay-panel">
             <div class="card-upload-overlay-copy" id="card-upload-overlay-copy">drop files to attach them to this card</div>
@@ -14,17 +14,15 @@
     <a href="#" class="modal-close" id="card-modal-close" aria-label="close">
         <i class="fa-solid fa-xmark"></i>
     </a>
-    <form id="card-detail-form" data-id="{{.card.ID}}" data-board-slug="{{.board.Slug}}" data-can-edit="{{if .canEdit}}1{{else}}0{{end}}">
-        <input type="hidden" name="color" value="{{.card.Color}}">
-        <div class="card-detail-layout">
-            <div class="card-main-pane">
+    <div class="card-detail-layout">
+        <div class="card-main-pane">
                 {{if .canEdit}}
-                <div class="card-edit-warning is-hidden" id="card-edit-warning">
-                    warning: card information has been modified elsewhere
-                </div>
-                <input type="text" class="card-title-input" name="title" value="{{.card.Title}}" placeholder="card title">
+                    <div class="card-edit-warning is-hidden" id="card-edit-warning">
+                        warning: card information has been modified elsewhere
+                    </div>
+                    <input type="text" class="card-title-input" name="title" form="card-detail-form" value="{{.card.Title}}" placeholder="card title">
                 {{else}}
-                <div class="card-title-display">{{.card.Title}}</div>
+                    <div class="card-title-display">{{.card.Title}}</div>
                 {{end}}
                 <div class="card-assignees{{if not .card.Assignees}} is-empty{{end}}" id="card-assignees">
                     {{range .card.Assignees}}
@@ -51,7 +49,6 @@
                                 <a href="#" class="label-remove-btn" aria-label="remove {{.Title}} label">
                                     <i class="fa-solid fa-circle-xmark"></i>
                                 </a>
-                                <input type="hidden" name="label_ids" value="{{.ID}}">
                                 {{end}}
                             </span>
                             {{end}}
@@ -75,6 +72,26 @@
                         </div>
                         {{end}}
                     </div>
+                </div>
+
+                <div class="card-section">
+                    <div class="card-section-label">description</div>
+                    <div class="markdown-editable card-description-rendered{{if not .card.Content}} is-empty{{end}}" id="card-description-rendered">
+                        {{if .card.Content}}
+                        {{.cardRenderedContent}}
+                        {{else}}
+                        double-click to add a markdown description
+                        {{end}}
+                    </div>
+                    {{if .canEdit}}
+                    <form id="card-detail-form" data-id="{{.card.ID}}">
+                        <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
+                        <div class="card-actions btn-row is-hidden">
+                            <a href="#" class="btn-cancel" id="card-edit-cancel">cancel</a>
+                            <button type="submit">save</button>
+                        </div>
+                    </form>
+                    {{end}}
                 </div>
 
                 <div class="card-section attachments-section{{if not .card.Attachments}} is-empty{{end}}" id="card-attachments-section">
@@ -118,24 +135,6 @@
                     {{end}}
                 </div>
 
-                <div class="card-section">
-                    <div class="card-section-label">description</div>
-                    <div class="markdown-editable card-description-rendered{{if not .card.Content}} is-empty{{end}}" id="card-description-rendered">
-                        {{if .card.Content}}
-                        {{.cardRenderedContent}}
-                        {{else}}
-                        double-click to add a markdown description
-                        {{end}}
-                    </div>
-                    {{if .canEdit}}
-                    <textarea class="card-content-area" id="card-content-area" name="content" placeholder="description (markdown)">{{.card.Content}}</textarea>
-                    <div class="card-actions btn-row is-hidden">
-                        <a href="#" class="btn-cancel" id="card-edit-cancel">cancel</a>
-                        <button type="submit">save</button>
-                    </div>
-                    {{end}}
-                </div>
-
                 <div class="card-section checklist-section{{if not .checklist.Exists}} is-empty{{end}}" id="card-checklist-section">
                     <div class="card-section-label">checklist</div>
                     <div class="checklist-widget" id="card-checklist-widget">
@@ -158,7 +157,9 @@
                         {{end}}
                     </div>
                     {{if .canEdit}}
-                    <input type="text" id="checklist-new-item-input" autocomplete="off" placeholder="add an item">
+                    <form id="card-checklist-add-form">
+                        <input type="text" id="checklist-new-item-input" name="text" autocomplete="off" placeholder="add an item">
+                    </form>
                     <div class="checklist-actions-row">
                         <button type="button" class="quick-control-btn checklist-toggle-completed-btn" id="checklist-toggle-completed-btn">hide completed</button>
                         <button type="button" class="quick-control-btn checklist-delete-btn" id="checklist-delete-btn">delete</button>
@@ -191,26 +192,26 @@
                             </div>
                             <div class="card-comment-body">{{.BodyHTML}}</div>
                             {{if $.canEdit}}
-                            <div class="card-comment-edit-wrap" hidden>
+                            <form class="card-comment-edit-wrap card-comment-edit-form" hidden>
                                 <textarea class="card-comment-edit-area">{{.Body}}</textarea>
                                 <div class="add-card-actions btn-row">
                                     <a href="#" class="btn-cancel card-comment-edit-cancel">cancel</a>
-                                    <button type="button" class="card-comment-edit-save">save</button>
+                                    <button type="submit" class="card-comment-edit-save">save</button>
                                 </div>
-                            </div>
+                            </form>
                             {{end}}
                         </div>
                         {{end}}
                     </div>
                     {{if .canEdit}}
                     <button type="button" class="quick-control-btn" id="card-add-comment-inline-btn"{{if not .comments}} hidden{{end}}>add comment</button>
-                    <div class="card-comment-form" id="card-comment-form" hidden>
+                    <form class="card-comment-form" id="card-comment-form" hidden>
                         <textarea id="card-comment-textarea" placeholder="add a comment (markdown)"></textarea>
                         <div class="add-card-actions btn-row">
                             <a href="#" class="btn-cancel" id="card-comment-cancel">cancel</a>
-                            <button type="button" id="card-comment-submit">comment</button>
+                            <button type="submit" id="card-comment-submit">comment</button>
                         </div>
-                    </div>
+                    </form>
                     {{end}}
                 </div>
             </div>
@@ -363,5 +364,4 @@
         {{if .canEdit}}
         <input type="file" id="card-attachment-input" multiple hidden>
         {{end}}
-    </form>
 </div>

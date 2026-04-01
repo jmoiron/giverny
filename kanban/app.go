@@ -108,12 +108,12 @@ func (a *App) repairLegacyCardViewSchema() error {
 	}
 
 	type pragmaColumn struct {
-		CID       int            `db:"cid"`
-		Name      string         `db:"name"`
-		Type      string         `db:"type"`
-		NotNull   int            `db:"notnull"`
-		Default   sql.NullString `db:"dflt_value"`
-		PrimaryKey int           `db:"pk"`
+		CID        int            `db:"cid"`
+		Name       string         `db:"name"`
+		Type       string         `db:"type"`
+		NotNull    int            `db:"notnull"`
+		Default    sql.NullString `db:"dflt_value"`
+		PrimaryKey int            `db:"pk"`
 	}
 	var cols []pragmaColumn
 	if err := a.db.Select(&cols, `PRAGMA table_info(card_view)`); err != nil {
@@ -324,16 +324,16 @@ func (a *App) buildCardListPage(r *http.Request, user *gauth.User, q url.Values,
 	rawAssigned := strings.TrimSpace(q.Get("filter_user"))
 	rawSubscribed := strings.TrimSpace(q.Get("filter_subscribed"))
 	filter := CardListFilter{
-		Query:         q.Get("q"),
-		BoardID:       parseInt(q.Get("filter_board")),
-		LabelIDs:      parseIDs(q["filter_label"]),
-		LabelMatchAll: q.Get("filter_label_match") != "any",
-		UserID:        parseInt(rawAssigned),
-		UserUnassigned: rawAssigned == "__unassigned__",
-		SubUserID:     parseInt(rawSubscribed),
+		Query:           q.Get("q"),
+		BoardID:         parseInt(q.Get("filter_board")),
+		LabelIDs:        parseIDs(q["filter_label"]),
+		LabelMatchAll:   q.Get("filter_label_match") != "any",
+		UserID:          parseInt(rawAssigned),
+		UserUnassigned:  rawAssigned == "__unassigned__",
+		SubUserID:       parseInt(rawSubscribed),
 		SubUnsubscribed: rawSubscribed == "__unsubscribed__",
-		ColumnName:    strings.TrimSpace(q.Get("filter_col")),
-		DoneState:     validState(q.Get("filter_done_state"), "all", "done", "not_done"),
+		ColumnName:      strings.TrimSpace(q.Get("filter_col")),
+		DoneState:       validState(q.Get("filter_done_state"), "all", "done", "not_done"),
 	}
 	filterActive := filter.Query != "" || filter.BoardID != 0 || len(filter.LabelIDs) > 0 ||
 		filter.UserID != 0 || filter.UserUnassigned || filter.SubUserID != 0 || filter.SubUnsubscribed ||
@@ -420,35 +420,35 @@ func (a *App) buildCardListPage(r *http.Request, user *gauth.User, q url.Values,
 	}
 	filterPanelOpen := filterActive && activeView == nil
 	return mtr.Ctx{
-		"title":        pageTitle,
-		"user":         user,
-		"pageTitle":    pageTitle,
-		"cards":        rows,
-		"sort":         sortCol,
-		"dir":          sortDir,
-		"sortURLs":     sortURLs,
-		"sortDirs":     sortDirs,
-		"clearURL":     clearURL,
-		"filterActive": filterActive,
-		"filterPanelOpen": filterPanelOpen,
-		"listPath":     listPath,
-		"filterBoard":  filter.BoardID,
-		"filterLabels": filter.LabelIDs,
-		"filterLabelMatchAll": filter.LabelMatchAll,
-		"filterUser":   filter.UserID,
-		"filterUserUnassigned": filter.UserUnassigned,
-		"filterSub":    filter.SubUserID,
+		"title":                 pageTitle,
+		"user":                  user,
+		"pageTitle":             pageTitle,
+		"cards":                 rows,
+		"sort":                  sortCol,
+		"dir":                   sortDir,
+		"sortURLs":              sortURLs,
+		"sortDirs":              sortDirs,
+		"clearURL":              clearURL,
+		"filterActive":          filterActive,
+		"filterPanelOpen":       filterPanelOpen,
+		"listPath":              listPath,
+		"filterBoard":           filter.BoardID,
+		"filterLabels":          filter.LabelIDs,
+		"filterLabelMatchAll":   filter.LabelMatchAll,
+		"filterUser":            filter.UserID,
+		"filterUserUnassigned":  filter.UserUnassigned,
+		"filterSub":             filter.SubUserID,
 		"filterSubUnsubscribed": filter.SubUnsubscribed,
-		"filterCol":    filter.ColumnName,
-		"filterQuery":  filter.Query,
-		"filterDoneState": filter.DoneState,
-		"users":        allUsers,
-		"labels":       allLabels,
-		"boards":       allBoards,
-		"columns":      allColumns,
-		"cardModalShell": cardModalShell,
-		"currentQueryString": q.Encode(),
-		"activeView": activeView,
+		"filterCol":             filter.ColumnName,
+		"filterQuery":           filter.Query,
+		"filterDoneState":       filter.DoneState,
+		"users":                 allUsers,
+		"labels":                allLabels,
+		"boards":                allBoards,
+		"columns":               allColumns,
+		"cardModalShell":        cardModalShell,
+		"currentQueryString":    q.Encode(),
+		"activeView":            activeView,
 	}, nil
 }
 
@@ -1285,15 +1285,15 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board.html", mtr.Ctx{
-		"title":     board.Name,
-		"board":     board,
-		"columns":   columnsWithCards,
-		"archived":  renderedArchived,
-		"user":      user,
-		"isAdmin":   user != nil && user.IsAdmin(),
-		"canEdit":   canEdit,
+		"title":          board.Name,
+		"board":          board,
+		"columns":        columnsWithCards,
+		"archived":       renderedArchived,
+		"user":           user,
+		"isAdmin":        user != nil && user.IsAdmin(),
+		"canEdit":        canEdit,
 		"cardModalShell": cardModalShell,
-		"mainClass": "board-main",
+		"mainClass":      "board-main",
 	}); err != nil {
 		app.Http500("rendering board", w, err)
 	}
@@ -1799,18 +1799,8 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 	}
 	title := r.FormValue("title")
 	content := r.FormValue("content")
-	color := r.FormValue("color")
-	labelIDs := make([]int64, 0, len(r.Form["label_ids"]))
-	for _, rawID := range r.Form["label_ids"] {
-		labelID, err := parseID(rawID)
-		if err != nil {
-			apiErr(w, http.StatusBadRequest, "invalid label id")
-			return
-		}
-		labelIDs = append(labelIDs, labelID)
-	}
 
-	if err := a.cards.Update(cardID, title, content, color, labelIDs); err != nil {
+	if err := a.cards.Update(cardID, title, content); err != nil {
 		apiErr(w, http.StatusInternalServerError, "update failed")
 		return
 	}

@@ -3,8 +3,30 @@ $(function() {
     var cardPermalinksEnabled = !!board || $('.card-list-wrap').length > 0;
     var DEFAULT_LABEL_COLOR = '#888888';
 
-    function cardBoard($form) {
-        return ($form && $form.data('board-slug')) || board || '';
+    function cardDetail($scope) {
+        if ($scope && $scope.length) {
+            if ($scope.is('.card-detail')) return $scope.first();
+            var $detail = $scope.closest('.card-detail');
+            if ($detail.length) return $detail.first();
+        }
+        return $('.card-detail').first();
+    }
+
+    function primaryCardForm($scope) {
+        var $detail = cardDetail($scope);
+        return $detail.find('#card-detail-form').first();
+    }
+
+    function cardID($scope) {
+        var $detail = cardDetail($scope);
+        if ($detail.length) return Number($detail.data('card-id')) || 0;
+        var $form = $scope && $scope.length && $scope.is('#card-detail-form') ? $scope : ($scope && $scope.closest ? $scope.closest('#card-detail-form') : $());
+        return Number($form && $form.data('id')) || 0;
+    }
+
+    function cardBoard($scope) {
+        var $detail = cardDetail($scope);
+        return ($detail && $detail.data('board-slug')) || ($scope && $scope.data && $scope.data('board-slug')) || board || '';
     }
     var collapsedColumnsKey = 'giverny:collapsed-columns:' + board;
     var activeLabelIndex = -1;
@@ -161,17 +183,18 @@ $(function() {
     }
 
     function showCardEditWarning($form) {
-        $form.find('#card-edit-warning').removeClass('is-hidden');
+        cardDetail($form).find('#card-edit-warning').removeClass('is-hidden');
     }
 
     function hideCardEditWarning($form) {
-        $form.find('#card-edit-warning').addClass('is-hidden');
+        cardDetail($form).find('#card-edit-warning').addClass('is-hidden');
     }
 
     function enableDescriptionEditing($form) {
-        if (!$form.length || String($form.attr('data-can-edit')) !== '1') return;
-        if ($form.closest('.card-detail').hasClass('editing-description')) return;
-        $form.closest('.card-detail').addClass('editing-description');
+        var $detail = cardDetail($form);
+        if (!$form.length || !$detail.length || String($detail.attr('data-can-edit')) !== '1') return;
+        if ($detail.hasClass('editing-description')) return;
+        $detail.addClass('editing-description');
         showCardSave($form);
         var textarea = $form.find('#card-content-area')[0];
         if (textarea) {
@@ -181,8 +204,8 @@ $(function() {
     }
 
     function syncCardDescriptionDisplay($form, content, renderedHTML) {
-        var $detail = $form.closest('.card-detail');
-        var $rendered = $form.find('#card-description-rendered');
+        var $detail = cardDetail($form);
+        var $rendered = $detail.find('#card-description-rendered');
         var hasContent = !!String(content || '').trim();
         if (hasContent) {
             $rendered.removeClass('is-empty').html(renderedHTML || '');
@@ -194,7 +217,7 @@ $(function() {
 
     function applyRemoteCardState($form) {
         var remote = getRemoteCardState($form);
-        $form.find('.card-title-input').val(remote.title);
+        cardDetail($form).find('.card-title-input').val(remote.title);
         $form.find('#card-content-area').val(remote.content);
         syncCardDescriptionDisplay($form, remote.content, remote.contentRendered);
         hideCardSave($form);
@@ -638,7 +661,6 @@ $(function() {
                 .attr('aria-label', 'remove ' + label.title + ' label')
                 .append('<i class="fa-solid fa-circle-xmark"></i>')
         );
-        $pill.append($('<input type="hidden" name="label_ids">').val(label.id));
         return $pill;
     }
 
@@ -909,7 +931,7 @@ $(function() {
         var remote = getRemoteCardState($form);
         setRemoteCardState($form, payload.title || '', remote.content, remote.contentRendered);
         if (isCardViewing($form)) {
-            $form.find('.card-title-input').val(payload.title || '');
+            cardDetail($form).find('.card-title-input').val(payload.title || '');
             hideCardEditWarning($form);
             return;
         }
@@ -1667,9 +1689,9 @@ $(function() {
                 updateSelectedLabelsState();
                 setRemoteCardState(
                     $form,
-                    $form.find('.card-title-input').val(),
+                    cardDetail($form).find('.card-title-input').val(),
                     $form.find('#card-content-area').val(),
-                    $form.find('#card-description-rendered').html()
+                    cardDetail($form).find('#card-description-rendered').html()
                 );
                 hideCardEditWarning($form);
                 updateChecklistCompletedVisibility();
@@ -2052,11 +2074,11 @@ $(function() {
     });
 
     $(document).on('dblclick', '#card-description-rendered', function() {
-        enableDescriptionEditing($(this).closest('#card-detail-form'));
+        enableDescriptionEditing(primaryCardForm($(this)));
     });
 
-    $(document).on('input', '#card-detail-form .card-title-input, #card-detail-form #card-content-area', function() {
-        showCardSave($(this).closest('#card-detail-form'));
+    $(document).on('input', '.card-title-input, #card-detail-form #card-content-area', function() {
+        showCardSave(primaryCardForm($(this)));
     });
 
     $(document).on('click', '#card-edit-cancel', function(e) {
@@ -2065,7 +2087,7 @@ $(function() {
     });
 
     $(document).on('keydown', '#card-label-input', function(e) {
-        var cardId = $(this).closest('#card-detail-form').data('id');
+        var cardId = cardID($(this));
         if (e.key === 'Enter') {
             e.preventDefault();
             addLabelFromInput(cardId);
@@ -2098,7 +2120,7 @@ $(function() {
     });
 
     $(document).on('click', '.label-suggestion', function() {
-        var cardId = $(this).closest('#card-detail-form').data('id');
+        var cardId = cardID($(this));
         var idx = Number($(this).data('index'));
         if (!isNaN(idx) && visibleLabelMatches[idx]) {
             persistAddLabel(cardId, visibleLabelMatches[idx]);
@@ -2153,10 +2175,11 @@ $(function() {
     });
 
     $(document).on('click', '.assign-suggestion', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
         var userId = $(this).data('user-id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/assign', {
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/assign', {
             assignee_id: userId
         })
             .then(function(r) { return r.json(); })
@@ -2169,10 +2192,11 @@ $(function() {
 
     $(document).on('click', '.card-assignee-remove', function(e) {
         e.preventDefault();
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
         var userId = $(this).closest('.card-assignee-pill').data('user-id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/assignees/' + userId + '/delete', {})
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/assignees/' + userId + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2181,10 +2205,11 @@ $(function() {
     });
 
     $(document).on('click', '.color-swatch-btn[data-color]', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
         var color = $(this).attr('data-color') || '';
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/color', { color: color })
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/color', { color: color })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2196,9 +2221,10 @@ $(function() {
     });
 
     $(document).on('input change', '#card-color-custom', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/color', { color: $(this).val() })
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/color', { color: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2206,9 +2232,9 @@ $(function() {
     });
 
     $(document).on('click', '#card-done-btn', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/done', {})
+        var $detail = cardDetail($(this));
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/done', {})
             .then(function(r) { return r.json(); })
             .then(function(payload) {
                 if (payload && payload.to_column_id) {
@@ -2224,10 +2250,10 @@ $(function() {
 
     $(document).on('click', '#card-subscribe-btn', function() {
         var $btn = $(this);
-        var $form = $btn.closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($btn);
+        var cardId = cardID($detail);
         var next = $btn.attr('data-subscribed') === '1' ? '0' : '1';
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/subscribe', { subscribed: next })
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/subscribe', { subscribed: next })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var subscribed = !!data.subscribed;
@@ -2250,9 +2276,10 @@ $(function() {
     });
 
     $(document).on('change', '#card-due-date-input', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/due-date', { date: $(this).val() })
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/due-date', { date: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2260,9 +2287,10 @@ $(function() {
     });
 
     $(document).on('change', '#card-start-date-input', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/start-date', { date: $(this).val() })
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/start-date', { date: $(this).val() })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2272,7 +2300,8 @@ $(function() {
     $(document).on('click', '.label-remove-btn', function(e) {
         e.preventDefault();
         var $pill = $(this).closest('.label-pill');
-        var $form = $(this).closest('#card-detail-form');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
         if (!$form.length) {
             if ($pill.closest('#card-list-selected-labels').length) {
                 $pill.remove();
@@ -2280,9 +2309,9 @@ $(function() {
             }
             return;
         }
-        var cardId = $form.data('id');
+        var cardId = cardID($detail);
         var labelId = $pill.data('label-id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/labels/' + labelId + '/delete', {})
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/labels/' + labelId + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function() {
                 $pill.remove();
@@ -2291,14 +2320,14 @@ $(function() {
             });
     });
 
-    $(document).on('keydown', '#checklist-new-item-input', function(e) {
-        if (e.key !== 'Enter') return;
+    $(document).on('submit', '#card-checklist-add-form', function(e) {
         e.preventDefault();
-        var text = $(this).val().trim();
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var text = $(this).find('#checklist-new-item-input').val().trim();
+        var cardId = cardID($detail);
         if (!text) return;
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items', { text: text })
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/checklist/items', { text: text })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2308,9 +2337,10 @@ $(function() {
 
     $(document).on('change', '.checklist-item-toggle', function() {
         var $item = $(this).closest('.checklist-item');
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/done', {
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/done', {
             done: this.checked ? '1' : '0'
         })
             .then(function(r) { return r.json(); })
@@ -2323,9 +2353,10 @@ $(function() {
         e.preventDefault();
         e.stopPropagation();
         var $item = $(this).closest('.checklist-item');
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/checklist/items/' + $item.data('item-id') + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2380,9 +2411,10 @@ $(function() {
     $(document).on('click', '.card-attachment-delete', function(e) {
         e.preventDefault();
         var $row = $(this).closest('.card-attachment-row');
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/delete', {})
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/attachments/' + $row.data('attachment-id') + '/delete', {})
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 applyCardMetaResponse($form, data);
@@ -2395,10 +2427,11 @@ $(function() {
     });
 
     $(document).on('click', '#checklist-delete-btn', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var $form = primaryCardForm($detail);
+        var cardId = cardID($detail);
         window.showConfirmModal('Delete this checklist?', function() {
-            post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/checklist/delete', {})
+            post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/checklist/delete', {})
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     applyCardMetaResponse($form, data);
@@ -2430,11 +2463,11 @@ $(function() {
         $c.append($header);
         $c.append($('<div class="card-comment-body"></div>').html(comment.body_rendered));
         if (canEdit) {
-            var $editWrap = $('<div class="card-comment-edit-wrap" hidden></div>');
+            var $editWrap = $('<form class="card-comment-edit-wrap card-comment-edit-form" hidden></form>');
             $editWrap.append($('<textarea class="card-comment-edit-area"></textarea>').val(comment.body));
             var $editActions = $('<div class="add-card-actions btn-row"></div>');
             $editActions.append($('<a href="#" class="btn-cancel card-comment-edit-cancel">cancel</a>'));
-            $editActions.append($('<button type="button" class="card-comment-edit-save">save</button>'));
+            $editActions.append($('<button type="submit" class="card-comment-edit-save">save</button>'));
             $editWrap.append($editActions);
             $c.append($editWrap);
         }
@@ -2442,7 +2475,7 @@ $(function() {
     }
 
     function cardCanEdit() {
-        return $('#card-detail-form').data('can-edit') == 1;
+        return cardDetail().data('can-edit') == 1;
     }
 
     function openCommentForm() {
@@ -2462,6 +2495,41 @@ $(function() {
         }
     }
 
+    function submitNewComment($commentForm) {
+        var $detail = cardDetail($commentForm);
+        var cardId = cardID($detail);
+        var body = $commentForm.find('#card-comment-textarea').val().trim();
+        if (!body) return;
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/comments', { body: body })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) return;
+                $commentForm.find('#card-comment-textarea').val('');
+                if (!$('#card-comments-list .card-comment[data-comment-id="' + data.comment.comment_id + '"]').length) {
+                    $('#card-comments-list').append(buildCommentElement(data.comment, cardCanEdit()));
+                }
+                $('#card-comments-section').removeClass('is-empty');
+                closeCommentForm();
+            });
+    }
+
+    function submitEditedComment($editForm) {
+        var $detail = cardDetail($editForm);
+        var cardId = cardID($detail);
+        var $comment = $editForm.closest('.card-comment');
+        var commentId = $comment.data('comment-id');
+        var body = $editForm.find('.card-comment-edit-area').val().trim();
+        if (!body) return;
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/comments/' + commentId + '/edit', { body: body })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) return;
+                $comment.find('.card-comment-body').html(data.comment.body_rendered).show();
+                $comment.find('.card-comment-edit-area').val(data.comment.body);
+                $comment.find('.card-comment-edit-wrap').attr('hidden', true);
+            });
+    }
+
     // Show comment section + form when comment button clicked (quick control or inline)
     $(document).on('click', '#card-comment-btn, #card-add-comment-inline-btn', function(e) {
         e.preventDefault();
@@ -2475,22 +2543,9 @@ $(function() {
     });
 
     // Submit new comment
-    $(document).on('click', '#card-comment-submit', function() {
-        var $form = $('#card-detail-form');
-        var cardId = $form.data('id');
-        var body = $('#card-comment-textarea').val().trim();
-        if (!body) return;
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments', { body: body })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.ok) return;
-                $('#card-comment-textarea').val('');
-                if (!$('#card-comments-list .card-comment[data-comment-id="' + data.comment.comment_id + '"]').length) {
-                    $('#card-comments-list').append(buildCommentElement(data.comment, cardCanEdit()));
-                }
-                $('#card-comments-section').removeClass('is-empty');
-                closeCommentForm();
-            });
+    $(document).on('submit', '#card-comment-form', function(e) {
+        e.preventDefault();
+        submitNewComment($(this));
     });
 
     // Toggle comment menu
@@ -2529,32 +2584,20 @@ $(function() {
     });
 
     // Save edited comment
-    $(document).on('click', '.card-comment-edit-save', function() {
-        var $comment = $(this).closest('.card-comment');
-        var $form = $('#card-detail-form');
-        var cardId = $form.data('id');
-        var commentId = $comment.data('comment-id');
-        var body = $comment.find('.card-comment-edit-area').val().trim();
-        if (!body) return;
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments/' + commentId + '/edit', { body: body })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.ok) return;
-                $comment.find('.card-comment-body').html(data.comment.body_rendered).show();
-                $comment.find('.card-comment-edit-area').val(data.comment.body);
-                $comment.find('.card-comment-edit-wrap').attr('hidden', true);
-            });
+    $(document).on('submit', '.card-comment-edit-form', function(e) {
+        e.preventDefault();
+        submitEditedComment($(this));
     });
 
     // Delete comment
     $(document).on('click', '.card-comment-delete-btn', function() {
         var $comment = $(this).closest('.card-comment');
-        var $form = $('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var cardId = cardID($detail);
         var commentId = $comment.data('comment-id');
         $comment.find('.card-comment-menu').prop('hidden', true);
         window.showConfirmModal('Delete this comment?', function() {
-            post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/comments/' + commentId + '/delete', {})
+            post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/comments/' + commentId + '/delete', {})
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.ok) return;
@@ -2569,8 +2612,8 @@ $(function() {
 
     // WS: comment added by another client
     function applyCardCommentAdded(payload) {
-        var $form = $('#card-detail-form');
-        if (!$form.length || Number($form.data('id')) !== Number(payload.card_id)) return;
+        var $detail = cardDetail();
+        if (!$detail.length || Number($detail.data('card-id')) !== Number(payload.card_id)) return;
         if ($('#card-comments-list .card-comment[data-comment-id="' + payload.comment_id + '"]').length) return;
         $('#card-comments-list').append(buildCommentElement(payload, cardCanEdit()));
         $('#card-comments-section').removeClass('is-empty');
@@ -2608,7 +2651,7 @@ $(function() {
                 } else {
                     $('.kanban-card[data-id="' + cardId + '"] .card-title').text(data.title);
                 }
-                $form.find('.card-title-input').val(data.title || '');
+                cardDetail($form).find('.card-title-input').val(data.title || '');
                 $form.find('#card-content-area').val(data.content || '');
                 setRemoteCardState($form, data.title || '', data.content || '', data.content_rendered || '');
                 syncCardDescriptionDisplay($form, data.content, data.content_rendered);
@@ -2619,10 +2662,10 @@ $(function() {
 
     // Move card (column select change)
     $(document).on('change', '#card-move-select', function() {
-        var $form = $(this).closest('#card-detail-form');
-        var cardId = $form.data('id');
+        var $detail = cardDetail($(this));
+        var cardId = cardID($detail);
         var colId = $(this).val();
-        post('/boards/' + cardBoard($form) + '/cards/' + cardId + '/move', { column_id: colId, position: 0 })
+        post('/boards/' + cardBoard($detail) + '/cards/' + cardId + '/move', { column_id: colId, position: 0 })
             .then(function() {});
     });
 
@@ -2679,7 +2722,7 @@ $(function() {
     if ($cardListTable.length) {
         var CARD_LIST_COLS_KEY = 'giverny:card-list-cols';
         var DEFAULT_COLS = ['title', 'board', 'labels', 'created', 'updated', 'due'];
-        var ALL_OPTIONAL = ['board', 'labels', 'created', 'updated', 'due', 'column', 'done', 'start', 'subscribed', 'checklist'];
+        var ALL_OPTIONAL = ['board', 'labels', 'created', 'updated', 'due', 'column', 'done', 'start', 'subscribed', 'comments', 'checklist'];
         var filterLabelMatches = [];
         var filterLabelIndex = -1;
         var filterUserIndex = -1;

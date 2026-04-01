@@ -61,9 +61,9 @@ type CardLabelRemovedPayload struct {
 }
 
 type LabelColorChangedPayload struct {
-	LabelID    int64  `json:"label_id"`
-	Color      string `json:"color"`
-	TextClass  string `json:"text_class"`
+	LabelID   int64  `json:"label_id"`
+	Color     string `json:"color"`
+	TextClass string `json:"text_class"`
 }
 
 type CardTitleModifiedPayload struct {
@@ -83,11 +83,11 @@ type CardColorChangedPayload struct {
 }
 
 type CardDateUpdatedPayload struct {
-	CardID            int64  `json:"card_id"`
-	StartDateValue    string `json:"start_date_value"`
-	DueDateValue      string `json:"due_date_value"`
-	UpdatedAtValue    string `json:"updated_at_value"`
-	UpdatedAtDisplay  string `json:"updated_at_display"`
+	CardID           int64  `json:"card_id"`
+	StartDateValue   string `json:"start_date_value"`
+	DueDateValue     string `json:"due_date_value"`
+	UpdatedAtValue   string `json:"updated_at_value"`
+	UpdatedAtDisplay string `json:"updated_at_display"`
 }
 
 type EventAttachmentPayload struct {

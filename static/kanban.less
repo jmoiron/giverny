@@ -352,6 +352,7 @@
     .col-done,
     .col-start,
     .col-subscribed,
+    .col-comments,
     .col-checklist { display: none; white-space: nowrap; }
     &.show-col-board .col-board       { display: table-cell; }
     &.show-col-labels .col-labels     { display: table-cell; }
@@ -362,6 +363,7 @@
     &.show-col-done .col-done         { display: table-cell; }
     &.show-col-start .col-start       { display: table-cell; }
     &.show-col-subscribed .col-subscribed { display: table-cell; }
+    &.show-col-comments .col-comments { display: table-cell; }
     &.show-col-checklist .col-checklist { display: table-cell; }
 
     .sort-link {
@@ -402,7 +404,12 @@
 
     .col-labels .label-pill { margin: 1px 2px; }
 
-    .col-subscribed, .col-done { text-align: center; font-size: 0.8rem; }
+    .col-created,
+    .col-updated,
+    .col-due,
+    .col-start { font-size: 0.88rem; }
+
+    .col-subscribed, .col-done, .col-comments { text-align: center; font-size: 0.8rem; }
     .col-checklist { font-size: 0.82rem; color: var(--muted); }
 }
 

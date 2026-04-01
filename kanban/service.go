@@ -23,25 +23,26 @@ type ColumnWithCards struct {
 
 type DashboardCard struct {
 	Card
-	BoardName  string `db:"board_name"`
-	BoardSlug  string `db:"board_slug"`
-	ColumnName string `db:"column_name"`
-	ColumnDone bool   `db:"column_done"`
-	Subscribed bool   `db:"-"`
+	BoardName    string `db:"board_name"`
+	BoardSlug    string `db:"board_slug"`
+	ColumnName   string `db:"column_name"`
+	ColumnDone   bool   `db:"column_done"`
+	CommentCount int    `db:"comment_count"`
+	Subscribed   bool   `db:"-"`
 }
 
 // CardListFilter holds the filter criteria for the cross-board card list.
 type CardListFilter struct {
-	Query         string
-	BoardID       int64
-	LabelIDs      []int64
-	LabelMatchAll bool
-	UserID        int64
-	UserUnassigned bool
-	SubUserID     int64
+	Query           string
+	BoardID         int64
+	LabelIDs        []int64
+	LabelMatchAll   bool
+	UserID          int64
+	UserUnassigned  bool
+	SubUserID       int64
 	SubUnsubscribed bool
-	ColumnName    string
-	DoneState     string
+	ColumnName      string
+	DoneState       string
 }
 
 type ColumnOption struct {
@@ -625,7 +626,8 @@ func (s *CardService) ListAll(isAdmin bool, sortCol, sortDir string, f CardListF
 	}
 	query := `
 		SELECT c.*, b.name AS board_name, b.slug AS board_slug,
-		       bc.name AS column_name, bc.done AS column_done
+		       bc.name AS column_name, bc.done AS column_done,
+		       (SELECT COUNT(*) FROM comment cm WHERE cm.card_id = c.id) AS comment_count
 		FROM card c
 		JOIN board b ON b.id = c.board_id
 		JOIN board_column bc ON bc.id = c.column_id
@@ -781,33 +783,13 @@ func (s *CardService) Recent(limit int, isAdmin bool) ([]*DashboardCard, error) 
 	return cards, nil
 }
 
-func (s *CardService) Update(id int64, title, content, color string, labelIDs []int64) error {
+func (s *CardService) Update(id int64, title, content string) error {
 	rendered := mtr.RenderMarkdown(content)
-	return db.With(s.db, func(tx *sqlx.Tx) error {
-		if _, err := tx.Exec(
-			`UPDATE card SET title=?, content=?, content_rendered=?, color=?, updated_at=datetime('now') WHERE id=?`,
-			title, content, rendered, sanitizeOptionalColor(color), id,
-		); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM card_label WHERE card_id=?`, id); err != nil {
-			return err
-		}
-		seen := make(map[int64]struct{}, len(labelIDs))
-		for _, labelID := range labelIDs {
-			if labelID == 0 {
-				continue
-			}
-			if _, ok := seen[labelID]; ok {
-				continue
-			}
-			seen[labelID] = struct{}{}
-			if _, err := tx.Exec(`INSERT INTO card_label (card_id, label_id) VALUES (?, ?)`, id, labelID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	_, err := s.db.Exec(
+		`UPDATE card SET title=?, content=?, content_rendered=?, updated_at=datetime('now') WHERE id=?`,
+		title, content, rendered, id,
+	)
+	return err
 }
 
 func (s *CardService) AddLabel(cardID, labelID int64) error {

@@ -19,8 +19,8 @@ import (
 var templates embed.FS
 
 type App struct {
-	db   db.DB
-	svc  *Service
+	db  db.DB
+	svc *Service
 }
 
 func NewApp(dbh db.DB, secret string) (*App, error) {

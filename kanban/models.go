@@ -38,20 +38,20 @@ type Column struct {
 }
 
 type Card struct {
-	ID              int64      `db:"id"`
-	ColumnID        int64      `db:"column_id"`
-	BoardID         int64      `db:"board_id"`
-	Title           string     `db:"title"`
-	Content         string     `db:"content"`
-	ContentRendered string     `db:"content_rendered"`
-	Position        int        `db:"position"`
-	Color           string     `db:"color"`
-	StartDate       *time.Time `db:"start_date"`
-	DueDate         *time.Time `db:"due_date"`
-	ArchivedAt      *time.Time `db:"archived_at"`
-	CreatedBy       int64      `db:"created_by"`
-	CreatedAt       time.Time  `db:"created_at"`
-	UpdatedAt       time.Time  `db:"updated_at"`
+	ID              int64         `db:"id"`
+	ColumnID        int64         `db:"column_id"`
+	BoardID         int64         `db:"board_id"`
+	Title           string        `db:"title"`
+	Content         string        `db:"content"`
+	ContentRendered string        `db:"content_rendered"`
+	Position        int           `db:"position"`
+	Color           string        `db:"color"`
+	StartDate       *time.Time    `db:"start_date"`
+	DueDate         *time.Time    `db:"due_date"`
+	ArchivedAt      *time.Time    `db:"archived_at"`
+	CreatedBy       int64         `db:"created_by"`
+	CreatedAt       time.Time     `db:"created_at"`
+	UpdatedAt       time.Time     `db:"updated_at"`
 	Labels          []*Label      `db:"-"`
 	Assignees       []*gauth.User `db:"-"`
 	Checklist       *Checklist    `db:"-"`
@@ -92,10 +92,10 @@ type CardLabel struct {
 }
 
 type Checklist struct {
-	ID       int64  `db:"id"`
-	CardID   int64  `db:"card_id"`
-	Title    string `db:"title"`
-	Position int    `db:"position"`
+	ID       int64            `db:"id"`
+	CardID   int64            `db:"card_id"`
+	Title    string           `db:"title"`
+	Position int              `db:"position"`
 	Items    []*ChecklistItem `db:"-"`
 }
 
