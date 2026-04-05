@@ -16,6 +16,8 @@ It's kanban.
 * You can assign users and due dates to cards.
 * You can attach files to cards.
 * You can add checklists and labels to cards.
+* You can view all cards from all boards in a list and search/filter them.
+* You can save searches as "views"
 
 All modifications go through a websocket so all users get live updates from every other user.
 
@@ -27,7 +29,6 @@ Some things I'd like:
 
 I'd like some good non-kanban views:
 
-* list of tasks with various board/state/content filters
 * gantt/calendar view
 
 I'd like decent mobile web support. This _probably_ doesn't mean a mobile kanban view, but maybe a mobile list view.
@@ -38,7 +39,6 @@ I'd like decent mobile web support. This _probably_ doesn't mean a mobile kanban
 * complex user management, eg. teams
 
 Probably a lot of other stuff.
-
 
 ### why another kanban
 
