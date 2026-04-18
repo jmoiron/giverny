@@ -571,9 +571,10 @@ $(function() {
         attachmentDragDepth = 0;
         attachmentUploadInFlight = false;
         var $overlay = $('#card-upload-overlay');
-        $overlay.removeClass('is-complete').addClass('is-hidden');
+        $overlay.removeClass('is-complete is-error').addClass('is-hidden');
         $('#card-upload-overlay-copy').text('drop files to attach them to this card');
         $('#card-upload-overlay-name').text('');
+        $('#card-upload-overlay-error').addClass('is-hidden').text('');
         $('#card-upload-progress').addClass('is-hidden');
         $('#card-upload-progress-copy').text('0%');
         $('#card-upload-progress-fill').css('width', '0%');
@@ -582,18 +583,44 @@ $(function() {
     function showAttachmentOverlay(message, name) {
         $('#card-upload-overlay-copy').text(message || 'drop files to attach them to this card');
         $('#card-upload-overlay-name').text(name || '');
+        $('#card-upload-overlay-error').addClass('is-hidden').text('');
         $('#card-upload-progress').addClass('is-hidden');
-        $('#card-upload-overlay').removeClass('is-hidden is-complete');
+        $('#card-upload-overlay').removeClass('is-hidden is-complete is-error');
     }
 
     function updateAttachmentOverlayProgress(message, name, percent) {
         var pct = Math.max(0, Math.min(100, Number(percent || 0)));
         $('#card-upload-overlay-copy').text(message || 'uploading attachment');
         $('#card-upload-overlay-name').text(name || '');
+        $('#card-upload-overlay-error').addClass('is-hidden').text('');
         $('#card-upload-progress').removeClass('is-hidden');
         $('#card-upload-progress-copy').text(String(pct) + '%');
         $('#card-upload-progress-fill').css('width', String(pct) + '%');
-        $('#card-upload-overlay').removeClass('is-hidden is-complete');
+        $('#card-upload-overlay').removeClass('is-hidden is-complete is-error');
+    }
+
+    function parseUploadErrorResponse(xhr) {
+        var fallback = 'attachment upload failed';
+        if (!xhr) return fallback;
+        if (xhr.status === 413) return 'attachments must be 16 MiB or smaller';
+        var data = xhr.response;
+        if (!data && xhr.responseText) {
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (_) {}
+        }
+        if (data && data.error) return data.error;
+        if (xhr.status >= 500) return 'attachment upload failed on the server';
+        return fallback;
+    }
+
+    function showAttachmentOverlayError(message, name) {
+        attachmentUploadInFlight = false;
+        $('#card-upload-overlay-copy').text('attachment upload failed');
+        $('#card-upload-overlay-name').text(name || '');
+        $('#card-upload-overlay-error').removeClass('is-hidden').text(message || 'attachment upload failed');
+        $('#card-upload-progress').addClass('is-hidden');
+        $('#card-upload-overlay').removeClass('is-hidden is-complete').addClass('is-error');
     }
 
     function completeAttachmentOverlay() {
@@ -1751,13 +1778,15 @@ $(function() {
                     resolve(data);
                     return;
                 }
-                resetAttachmentOverlay();
-                reject(new Error('attachment upload failed'));
+                var message = parseUploadErrorResponse(xhr);
+                showAttachmentOverlayError(message, file.name || '');
+                reject(new Error(message));
             };
             xhr.onerror = function() {
                 attachmentUploadInFlight = false;
-                resetAttachmentOverlay();
-                reject(new Error('attachment upload failed'));
+                var message = parseUploadErrorResponse(xhr);
+                showAttachmentOverlayError(message, file.name || '');
+                reject(new Error(message));
             };
             xhr.send(formData);
         });

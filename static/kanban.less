@@ -1180,6 +1180,11 @@ body.drag-column .board-columns * {
         &.is-complete {
             opacity: 0;
         }
+
+        &.is-error .card-upload-overlay-panel {
+            border-color: color-mix(in srgb, var(--red) 65%, var(--border) 35%);
+            background: color-mix(in srgb, var(--surface) 88%, var(--red) 12%);
+        }
     }
 
     .card-upload-overlay-panel {
@@ -1204,6 +1209,16 @@ body.drag-column .board-columns * {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .card-upload-overlay-error {
+        margin-top: 0.8rem;
+        font-size: 0.84rem;
+        color: var(--red);
+
+        &.is-hidden {
+            display: none;
+        }
     }
 
     .card-upload-progress {

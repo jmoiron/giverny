@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +33,8 @@ import (
 
 //go:embed kanban/*.html
 var templates embed.FS
+
+const maxAttachmentSize = 16 << 20
 
 // App is the kanban sub-application.
 type App struct {
@@ -2198,7 +2201,13 @@ func (a *App) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusInternalServerError, "attachment storage is not writable")
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentSize+(1<<20))
+	if err := r.ParseMultipartForm(maxAttachmentSize); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) || errors.Is(err, multipart.ErrMessageTooLarge) {
+			apiErr(w, http.StatusRequestEntityTooLarge, "attachments must be 16 MiB or smaller")
+			return
+		}
 		apiErr(w, http.StatusBadRequest, "failed to parse upload")
 		return
 	}
@@ -2208,9 +2217,21 @@ func (a *App) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, 32<<20))
-	if err != nil || len(data) == 0 {
+	if header.Size > maxAttachmentSize {
+		apiErr(w, http.StatusRequestEntityTooLarge, "attachments must be 16 MiB or smaller")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxAttachmentSize+1))
+	if err != nil {
 		apiErr(w, http.StatusBadRequest, "failed to read upload")
+		return
+	}
+	if len(data) == 0 {
+		apiErr(w, http.StatusBadRequest, "failed to read upload")
+		return
+	}
+	if len(data) > maxAttachmentSize {
+		apiErr(w, http.StatusRequestEntityTooLarge, "attachments must be 16 MiB or smaller")
 		return
 	}
 	contentType := http.DetectContentType(data[:minInt(len(data), 512)])

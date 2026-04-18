@@ -7,6 +7,7 @@ upstream giverny {
 server {
     listen 443 ssl;
     server_name giverny.example.com;
+    client_max_body_size 16m;
 
     # if you aren't using letsencrypt then.. why not?
     ssl_certificate         /etc/letsencrypt/live/giverny.example.com/fullchain.pem;
