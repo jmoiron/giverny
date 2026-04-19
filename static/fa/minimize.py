@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, Set, Tuple
 from fontTools.ttLib import TTFont
 from fontTools.subset import Subsetter
 
+REPRO_TIMESTAMP = 0x7C259DC0
+
 
 # CSS Constants
 BASE_STYLES = """.fa-solid,
@@ -312,8 +314,7 @@ def unicode_string_to_codepoint(unicode_str: str) -> int:
     Convert a unicode escape string like '\\f09b' to a codepoint integer.
 
     Handles hex escapes (e.g. '\\f09b') as well as CSS literal-character
-    escapes like '\\+' where the character after the backslash is not a hex
-    digit (e.g. FA7's fa-plus uses '--fa: "\\+"').
+    escapes like '\\+'.
 
     Args:
         unicode_str: Unicode escape string (e.g., '\\f09b' or '\\+')
@@ -325,8 +326,6 @@ def unicode_string_to_codepoint(unicode_str: str) -> int:
     try:
         return int(hex_part, 16)
     except ValueError:
-        # Non-hex escape: treat the remaining character(s) as a literal string
-        # and return the codepoint of the first character.
         if hex_part:
             return ord(hex_part[0])
         raise ValueError(f"Cannot convert unicode string to codepoint: {unicode_str!r}")
@@ -371,27 +370,26 @@ def subset_font_file(source_font_path: str, codepoints: Set[int], output_path: s
     if not source_path.exists():
         raise FileNotFoundError(f"Font file not found: {source_font_path}")
     
-    # Load the source font; recalcTimestamp=False prevents save() from
-    # overwriting head.modified with the current time on every run.
+    # Prevent fontTools from stamping the current time into output files.
     font = TTFont(source_font_path, recalcTimestamp=False)
-
+    
     # Create subsetter and configure options
     subsetter = Subsetter()
-
+    
     # Configure subsetting options for optimal output
     subsetter.options.desubroutinize = True  # Remove subroutines for smaller size
     subsetter.options.layout_features = []  # Remove layout features we don't need
     subsetter.options.name_IDs = ['*']  # Keep all name records
     subsetter.options.notdef_outline = True  # Keep .notdef glyph
-
+    
     # Subset the font to include only the specified codepoints
     subsetter.populate(unicodes=codepoints)
     subsetter.subset(font)
 
-    # Zero out the modified timestamp for reproducible output
     if 'head' in font:
-        font['head'].modified = 0
-
+        font['head'].created = REPRO_TIMESTAMP
+        font['head'].modified = REPRO_TIMESTAMP
+    
     # Save the subset font
     font.save(output_path)
     font.close()
@@ -487,7 +485,8 @@ def combine_font_subsets(family_codepoints: Dict[str, Set[int]], output_path: st
                 merged_font = merger.merge(temp_files)
                 merged_font.recalcTimestamp = False
                 if 'head' in merged_font:
-                    merged_font['head'].modified = 0
+                    merged_font['head'].created = REPRO_TIMESTAMP
+                    merged_font['head'].modified = REPRO_TIMESTAMP
                 merged_font.save(output_path)
                 merged_font.close()
             
