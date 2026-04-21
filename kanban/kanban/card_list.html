@@ -172,6 +172,7 @@
             <label class="col-check"><input type="checkbox" data-col="done"><span>done</span></label>
             <label class="col-check"><input type="checkbox" data-col="start"><span>start</span></label>
             <label class="col-check"><input type="checkbox" data-col="subscribed"><span>subscribed</span></label>
+            <label class="col-check"><input type="checkbox" data-col="assigned"><span>assigned</span></label>
             <label class="col-check"><input type="checkbox" data-col="comments"><span>comments</span></label>
             <label class="col-check"><input type="checkbox" data-col="checklist"><span>checklist</span></label>
         </div>
@@ -222,6 +223,7 @@
                     </a>
                 </th>
                 <th class="col-subscribed" title="subscribed"><i class="fa-solid fa-bell"></i></th>
+                <th class="col-assigned">assigned</th>
                 <th class="col-comments" title="comments"><i class="fa-solid fa-comments"></i></th>
                 <th class="col-checklist" title="checklist"><i class="fa-solid fa-list-check"></i></th>
             </tr>
@@ -247,6 +249,7 @@
                 <td class="col-done">{{if .ColumnDone}}<i class="fa-solid fa-check"></i>{{end}}</td>
                 <td class="col-start">{{.StartDateDisplay}}</td>
                 <td class="col-subscribed">{{if .Subscribed}}<i class="fa-solid fa-bell"></i>{{end}}</td>
+                <td class="col-assigned">{{range .Assignees}}<span class="card-assignee-pill">{{if .ProfileImageURI}}<img class="card-assignee-avatar" src="{{.ProfileImageURI}}" alt="">{{end}}<span class="card-assignee-name">{{.Username}}</span></span>{{end}}</td>
                 <td class="col-comments">{{if .CommentCount}}{{.CommentCount}}{{end}}</td>
                 <td class="col-checklist">{{if .ChecklistTotal}}{{.ChecklistDone}}/{{.ChecklistTotal}}{{end}}</td>
             </tr>

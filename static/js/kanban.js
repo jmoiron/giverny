@@ -2751,7 +2751,7 @@ $(function() {
     if ($cardListTable.length) {
         var CARD_LIST_COLS_KEY = 'giverny:card-list-cols';
         var DEFAULT_COLS = ['title', 'board', 'labels', 'created', 'updated', 'due'];
-        var ALL_OPTIONAL = ['board', 'labels', 'created', 'updated', 'due', 'column', 'done', 'start', 'subscribed', 'comments', 'checklist'];
+        var ALL_OPTIONAL = ['board', 'labels', 'created', 'updated', 'due', 'column', 'done', 'start', 'subscribed', 'assigned', 'comments', 'checklist'];
         var filterLabelMatches = [];
         var filterLabelIndex = -1;
         var filterUserIndex = -1;

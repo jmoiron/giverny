@@ -1,4 +1,8 @@
 // Card list view
+.card-list-wrap.page-wrap {
+    max-width: none;
+}
+
 .quick-section-title {
     font-size: 0.78rem;
     letter-spacing: 0.06em;
@@ -353,6 +357,7 @@
     .col-start,
     .col-subscribed,
     .col-comments,
+    .col-assigned,
     .col-checklist { display: none; white-space: nowrap; }
     &.show-col-board .col-board       { display: table-cell; }
     &.show-col-labels .col-labels     { display: table-cell; }
@@ -364,6 +369,7 @@
     &.show-col-start .col-start       { display: table-cell; }
     &.show-col-subscribed .col-subscribed { display: table-cell; }
     &.show-col-comments .col-comments { display: table-cell; }
+    &.show-col-assigned .col-assigned { display: table-cell; }
     &.show-col-checklist .col-checklist { display: table-cell; }
 
     .sort-link {
@@ -411,6 +417,7 @@
 
     .col-subscribed, .col-done, .col-comments { text-align: center; font-size: 0.8rem; }
     .col-checklist { font-size: 0.82rem; color: var(--muted); }
+    td.col-assigned { white-space: normal; }
 }
 
 // Board list
@@ -1142,6 +1149,33 @@ body.drag-column .board-columns * {
     color: var(--text);
 }
 
+.card-assignee-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.22rem 0.45rem 0.22rem 0.22rem;
+}
+
+.card-assignee-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.card-assignee-name {
+    font-size: 0.84rem;
+    color: var(--text);
+}
+
+.card-assignee-remove {
+    padding-left: 0.05rem;
+    font-size: 0.72rem;
+}
+
 .card-detail {
     .form-inputs();
 
@@ -1514,32 +1548,6 @@ body.drag-column .board-columns * {
         }
     }
 
-    .card-assignee-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        background: var(--hover-bg);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 0.22rem 0.45rem 0.22rem 0.22rem;
-    }
-
-    .card-assignee-avatar {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        object-fit: cover;
-    }
-
-    .card-assignee-name {
-        font-size: 0.84rem;
-        color: var(--text);
-    }
-
-    .card-assignee-remove {
-        padding-left: 0.05rem;
-        font-size: 0.72rem;
-    }
 
     .card-edit-warning {
         margin-bottom: 0.7rem;
