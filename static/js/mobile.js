@@ -238,6 +238,26 @@
                 }
             }).connect();
         }
+        var cardPage = document.querySelector('.mobile-card-page');
+        if (cardPage && window.createBoardSocket) {
+            var cardDetail = cardPage.querySelector('.card-detail');
+            var cardID = cardDetail && cardDetail.getAttribute('data-card-id');
+            var cardSlug = cardPage.getAttribute('data-board-slug');
+            if (cardID && cardSlug) {
+                window.createBoardSocket(cardSlug, {
+                    onEvent: function (event) {
+                        var payload = event.payload || {};
+                        if (String(payload.card_id || '') !== String(cardID)) return;
+                        // kanban.js handles local mutation DOM updates. A full
+                        // refresh covers events whose detail payload is not
+                        // available to the mobile presentation yet.
+                        if (/^card\.(title|description|checklist|attachments|label|comment|color|date)/.test(event.type)) {
+                            window.location.reload();
+                        }
+                    }
+                }).connect();
+            }
+        }
         if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js', {scope: '/mobile/'}).catch(function () {});
     });
 }());

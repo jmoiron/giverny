@@ -12,6 +12,7 @@
     <script src="/static/js/cash.min.js"></script>
     <script src="/static/js/app.js" defer></script>
     <script src="/static/js/ws-client.js" defer></script>
+    {{if .mobileCard}}<script src="/static/js/kanban.js" defer></script>{{end}}
     <script src="/static/js/mobile.js" defer></script>
     <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
 </head>

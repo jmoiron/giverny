@@ -189,7 +189,7 @@ func (a *App) handleCardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("rendering mobile card", w, err)
 		return
 	}
-	a.render(w, r, "mobile/card.html", mtr.Ctx{"title": card.Title, "user": user, "board": board, "cardBody": body})
+	a.render(w, r, "mobile/card.html", mtr.Ctx{"title": card.Title, "user": user, "board": board, "cardBody": body, "mobileCard": true})
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, name string, ctx mtr.Ctx) {

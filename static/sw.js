@@ -1,9 +1,10 @@
-const CACHE = 'giverny-mobile-v3';
+const CACHE = 'giverny-mobile-v4';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',
   '/static/js/cash.min.js',
   '/static/js/ws-client.js',
+  '/static/js/kanban.js',
   '/static/js/mobile.js',
   '/static/mobile.css',
   '/static/manifest.webmanifest',
