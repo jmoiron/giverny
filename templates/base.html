@@ -18,9 +18,10 @@
         {{end}}
         <script src="/static/js/cash.min.js"></script>
         <script src="/static/js/app.js" defer></script>
+        <script src="/static/js/webauthn.js" defer></script>
         <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
     </head>
-    <body{{if .user}} data-user-timezone="{{.user.Timezone}}"{{end}}>
+    <body{{if .user}} data-user-timezone="{{.user.Timezone}}" data-disable-passkey-prompt="{{if .user.DisablePasskeyPrompt}}1{{else}}0{{end}}"{{end}}>
         <header>
             <nav>
                 {{if .user}}
@@ -134,5 +135,18 @@
                 </div>
             </div>
         </div>
+        {{if .user}}
+        <div id="passkey-prompt" class="passkey-prompt" hidden role="dialog" aria-labelledby="passkey-prompt-title">
+            <div class="passkey-prompt-card">
+                <h2 id="passkey-prompt-title">create a passkey?</h2>
+                <p>Sign in faster next time with your device’s fingerprint, face unlock, or PIN.</p>
+                <div class="passkey-prompt-actions">
+                    <button type="button" id="passkey-prompt-dismiss">not now</button>
+                    <button type="button" id="passkey-prompt-create">create passkey</button>
+                </div>
+                <p class="settings-flash error" id="passkey-prompt-status" hidden></p>
+            </div>
+        </div>
+        {{end}}
     </body>
 </html>

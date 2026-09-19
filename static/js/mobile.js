@@ -248,12 +248,7 @@
                     onEvent: function (event) {
                         var payload = event.payload || {};
                         if (String(payload.card_id || '') !== String(cardID)) return;
-                        // kanban.js handles local mutation DOM updates. A full
-                        // refresh covers events whose detail payload is not
-                        // available to the mobile presentation yet.
-                        if (/^card\.(title|description|checklist|attachments|label|comment|color|date)/.test(event.type)) {
-                            window.location.reload();
-                        }
+                        if (window.CardDetail && window.CardDetail.applyEvent) window.CardDetail.applyEvent(event);
                     }
                 }).connect();
             }

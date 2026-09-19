@@ -76,6 +76,17 @@
     .mobile-login-card { width: min(100%, 24rem); padding: 2rem 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
     .mobile-login-card h1 { margin: 0 0 1.5rem; text-align: center; font-family: Courgette, sans-serif; font-size: 2.5rem; }
     .mobile-login-card form { display: grid; gap: .8rem; }
+    .passkey-login-btn { width: 100%; margin-bottom: .75rem; }
+    .mobile-login-divider { margin: .75rem 0; text-align: center; color: var(--muted); font-size: .85rem; }
+    .passkey-prompt { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgba(0,0,0,.4); }
+    .passkey-prompt[hidden] { display: none; }
+    .passkey-prompt-card { width: min(100%, 26rem); padding: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    .passkey-prompt-card h2 { margin-top: 0; }
+    .passkey-prompt-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+    .settings-passkeys { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; }
+    .settings-passkeys .settings-help { margin: 0; }
+    .passkey-list { width: 100%; margin: .25rem 0 0; padding: 0; list-style: none; }
+    .passkey-list li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
     .mobile-login-card label { display: grid; gap: .3rem; color: var(--muted); font-size: .9rem; }
     .mobile-login-card input { width: 100%; padding: .7rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg); color: var(--text); font: inherit; }
     .mobile-login-card button { margin-top: .4rem; padding: .7rem; border: 0; border-radius: 6px; background: var(--button-bg); color: var(--button-text); font: inherit; cursor: pointer; }
