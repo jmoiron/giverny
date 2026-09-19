@@ -1,0 +1,13 @@
+<div class="mobile-login">
+    <div class="mobile-login-card">
+        <h1>Giverny</h1>
+        {{if .error}}<p class="settings-flash error">{{.error}}</p>{{end}}
+        <form method="post" action="/mobile/login/">
+            <input type="hidden" name="redirect" value="{{.redirect}}">
+            <label>username<input type="text" name="username" autocomplete="username" required autofocus></label>
+            <label>password<input type="password" name="password" autocomplete="current-password" required></label>
+            <button type="submit">log in</button>
+        </form>
+        <a class="mobile-login-desktop-link" href="/login/">desktop login</a>
+    </div>
+</div>

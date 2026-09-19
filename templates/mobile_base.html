@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f5f5f5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon-180.png">
+    {{if .debug}}<link rel="stylesheet/less" href="/static/style.less"><script src="/static/js/less.min.js"></script>{{else}}<link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/mobile.css">{{end}}
+    <script src="/static/js/cash.min.js"></script>
+    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/ws-client.js" defer></script>
+    <script src="/static/js/mobile.js" defer></script>
+    <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
+</head>
+<body class="mobile-app"{{if .user}} data-user-timezone="{{.user.Timezone}}"{{end}}>
+    <header class="mobile-topbar">
+        <button id="mobile-left-toggle" aria-label="open navigation"><i class="fa-solid fa-bars"></i></button>
+        <a href="/mobile/" class="logo">Giverny</a>
+        {{if .user}}<button id="mobile-right-toggle" aria-label="open user menu">
+            {{if .user.ProfileImageURI}}<img class="mobile-avatar" src="{{.user.ProfileImageURI}}" alt="">{{else}}<span class="mobile-avatar avatar-fallback" aria-hidden="true"></span>{{end}}
+        </button>{{end}}
+        <div id="ws-banner" class="ws-banner is-hidden">reconnecting…</div>
+    </header>
+    <aside class="mobile-drawer-left" id="mobile-drawer-left">
+        <nav class="side-nav-inner">
+            <a href="/cards/my-tasks/" class="side-nav-item">my tasks</a>
+            <a href="/cards/subscribed/" class="side-nav-item">subscribed</a>
+            <a href="/cards/in-progress/" class="side-nav-item">in progress</a>
+            <div class="side-nav-section-label">boards</div>
+            <div id="side-nav-boards" class="side-nav-boards"></div>
+            <a href="/cards/views/" id="side-nav-views-label" class="side-nav-section-label hidden">views</a>
+            <div id="side-nav-views" class="side-nav-boards"></div>
+        </nav>
+    </aside>
+    <aside class="mobile-drawer-right" id="mobile-drawer-right">
+        {{if .user}}
+        <div class="mobile-user-card"><strong>{{.user.Username}}</strong><a href="/user/settings/">settings</a><button id="theme-toggle">toggle theme</button><a href="/mobile/logout/">logout</a></div>
+        {{end}}
+    </aside>
+    {{.body}}
+</body>
+</html>

@@ -39,6 +39,20 @@ type UserProfileService struct {
 	db db.DB
 }
 
+// Validate checks the password in monet's user table. It is exposed here so
+// presentation layers can provide an alternate login page without depending
+// on monet's unexported service field.
+func (s *UserProfileService) Validate(username, password string) (bool, error) {
+	var hash string
+	if err := s.db.Get(&hash, `SELECT password_hash FROM user WHERE username=?`, username); err != nil {
+		return false, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func NewUserProfileService(dbh db.DB) *UserProfileService {
 	return &UserProfileService{db: dbh}
 }

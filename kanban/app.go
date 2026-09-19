@@ -38,16 +38,24 @@ const maxAttachmentSize = 16 << 20
 
 // App is the kanban sub-application.
 type App struct {
-	db       db.DB
-	hub      *Hub
-	boards   *BoardService
-	columns  *ColumnService
-	cards    *CardService
-	labels   *LabelService
-	comments *CommentService
-	users    *gauth.UserProfileService
-	views    *ViewService
-	fss      vfs.Registry
+	db           db.DB
+	hub          *Hub
+	boards       *BoardService
+	columns      *ColumnService
+	cards        *CardService
+	labels       *LabelService
+	comments     *CommentService
+	users        *gauth.UserProfileService
+	views        *ViewService
+	fss          vfs.Registry
+	pushNotifier PushNotifier
+}
+
+// PushNotifier receives mutation notifications without coupling kanban to a
+// particular delivery mechanism.
+type PushNotifier interface {
+	NotifyCardAssigned(cardID, assigneeID int64)
+	NotifyNewComment(cardID, actorID int64)
 }
 
 func NewApp(dbh db.DB, fss vfs.Registry) *App {
@@ -84,6 +92,80 @@ type CommentDisplay struct {
 }
 
 func (a *App) Name() string { return "kanban" }
+
+func (a *App) Boards() *BoardService          { return a.boards }
+func (a *App) Cards() *CardService            { return a.cards }
+func (a *App) Columns() *ColumnService        { return a.columns }
+func (a *App) SetPushNotifier(n PushNotifier) { a.pushNotifier = n }
+
+func (a *App) CanViewBoard(board *Board, user *gauth.User) bool {
+	return canViewBoard(board, user)
+}
+
+func (a *App) CanModifyBoard(board *Board, user *gauth.User) bool {
+	return canModifyBoard(board, user)
+}
+
+// RenderedColumns returns the same card snippet view model used by the
+// desktop board page.
+func (a *App) RenderedColumns(r *http.Request, board *Board, canEdit bool) ([]*ColumnWithRenderedCards, error) {
+	cols, err := a.columns.ListByBoard(board.ID)
+	if err != nil {
+		return nil, err
+	}
+	cards, err := a.cards.ListByBoard(board.ID)
+	if err != nil {
+		return nil, err
+	}
+	return a.buildRenderedColumns(r, cols, cards, canEdit)
+}
+
+// RenderColumnCards renders one column's card snippets for a realtime refresh.
+func (a *App) RenderColumnCards(r *http.Request, colID int64, draggable bool) (template.HTML, error) {
+	col, err := a.columns.Get(colID)
+	if err != nil {
+		return "", err
+	}
+	cards, err := a.cards.ListByBoard(col.BoardID)
+	if err != nil {
+		return "", err
+	}
+	rendered, err := a.renderCards(r, func() []*Card {
+		filtered := make([]*Card, 0)
+		for _, card := range cards {
+			if card.ColumnID == colID {
+				filtered = append(filtered, card)
+			}
+		}
+		return filtered
+	}(), draggable)
+	if err != nil {
+		return "", err
+	}
+	var out strings.Builder
+	for _, card := range rendered {
+		out.WriteString(string(card.HTML))
+	}
+	return template.HTML(out.String()), nil
+}
+
+// RenderCardDetailHTML renders the card detail template without the desktop
+// modal shell, allowing another presentation layer to provide its own page
+// chrome.
+func (a *App) RenderCardDetailHTML(r *http.Request, board *Board, card *Card, user *gauth.User) (template.HTML, error) {
+	cw := &htmlCaptureWriter{header: make(http.Header)}
+	a.renderCardModal(cw, r, board, card, user)
+	return template.HTML(cw.buf.String()), nil
+}
+
+type htmlCaptureWriter struct {
+	header http.Header
+	buf    bytes.Buffer
+}
+
+func (w *htmlCaptureWriter) Header() http.Header         { return w.header }
+func (w *htmlCaptureWriter) WriteHeader(int)             {}
+func (w *htmlCaptureWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 
 func (a *App) RecentBoards(limit int, user *gauth.User) ([]*Board, error) {
 	return a.boards.RecentByCardActivity(limit, user != nil && user.IsAdmin())
@@ -1964,6 +2046,9 @@ func (a *App) handleSetCardAssignee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card assignee")
+	if a.pushNotifier != nil {
+		go a.pushNotifier.NotifyCardAssigned(card.ID, assigneeID)
+	}
 	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
 }
 
@@ -2622,6 +2707,9 @@ func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 	payload := a.commentPayload(r, comment)
 	a.publishBoardEvent(slug, EventCardCommentAdded, payload)
 	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added a comment")
+	if a.pushNotifier != nil {
+		go a.pushNotifier.NotifyNewComment(cardID, user.ID)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "comment": payload})
 }
 

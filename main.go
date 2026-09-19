@@ -18,6 +18,7 @@ import (
 	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/giverny/kanban"
+	"github.com/jmoiron/giverny/mobile"
 	gsmtp "github.com/jmoiron/giverny/smtp"
 	"github.com/jmoiron/monet/app"
 	"github.com/jmoiron/monet/auth"
@@ -168,13 +169,15 @@ func main() {
 	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
 	kanbanApp := kanban.NewApp(dbh, fss)
+	mobileApp := mobile.NewApp(dbh, cfg, kanbanApp, gauthApp, authApp, fss)
 
 	// apps is the ordered list of sub-applications. Auth must come first
 	// since other tables reference user(id).
-	apps := []app.App{authApp, gauthApp, smtpApp, kanbanApp}
+	apps := []app.App{authApp, gauthApp, smtpApp, kanbanApp, mobileApp}
 
 	reg := mtr.NewRegistry()
 	reg.AddBaseFS("base", "templates/base.html", templates)
+	reg.AddBaseFS("mobile-base", "templates/mobile_base.html", templates)
 	reg.AddPathFS("templates/index.html", templates)
 
 	for _, a := range apps {
@@ -226,6 +229,10 @@ func main() {
 		cacheStack[1] = middleware.NoCache
 	}
 
+	r.With(append(cacheStack, middleware.SetHeader("Service-Worker-Allowed", "/mobile/"))...).Handle(
+		"/static/sw.js", http.StripPrefix("/static", http.FileServer(http.FS(swp))))
+	r.With(append(cacheStack, middleware.SetHeader("Content-Type", "application/manifest+json"))...).Handle(
+		"/static/manifest.webmanifest", http.StripPrefix("/static", http.FileServer(http.FS(swp))))
 	r.With(cacheStack...).Handle("/static/*", http.StripPrefix("/static", http.FileServer(http.FS(swp))))
 
 	slog.Info("listening", "addr", cfg.ListenAddr)

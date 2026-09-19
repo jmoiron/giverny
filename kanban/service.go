@@ -307,8 +307,11 @@ func (s *BoardService) RecentByCardActivity(limit int, isAdmin bool) ([]*Board, 
 	if !isAdmin {
 		query += ` WHERE b.visibility IN ('open','public')`
 	}
-	query += ` ORDER BY rc.last_card_at DESC, b.name LIMIT ?`
-	args = append(args, limit)
+	query += ` ORDER BY rc.last_card_at DESC, b.name`
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
 	err := s.db.Select(&boards, query, args...)
 	return boards, err
 }
@@ -1008,6 +1011,18 @@ func (s *CardService) Subscribe(cardID, userID int64) error {
 func (s *CardService) Unsubscribe(cardID, userID int64) error {
 	_, err := s.db.Exec(`DELETE FROM card_subscription WHERE card_id=? AND user_id=?`, cardID, userID)
 	return err
+}
+
+// NotificationRecipients returns subscribed users and assignees for a card,
+// without duplicates.
+func (s *CardService) NotificationRecipients(cardID int64) ([]int64, error) {
+	var ids []int64
+	err := s.db.Select(&ids, `
+		SELECT user_id FROM card_subscription WHERE card_id=?
+		UNION
+		SELECT user_id FROM card_assignee WHERE card_id=?
+		ORDER BY user_id`, cardID, cardID)
+	return ids, err
 }
 
 func (s *CardService) RecordSubscriptionMessage(cardID int64, message string) error {
