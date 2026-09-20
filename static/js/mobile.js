@@ -132,8 +132,18 @@
         boardPage.appendChild(edgeLeft);
         boardPage.appendChild(edgeRight);
         function setEdges(active) {
-            edgeLeft.classList.toggle('active', active);
-            edgeRight.classList.toggle('active', active);
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            var maxScroll = columns ? Math.max(0, columns.scrollWidth - columns.clientWidth) : 0;
+            edgeLeft.classList.toggle('active', !!active && !!columns && columns.scrollLeft > 2);
+            edgeRight.classList.toggle('active', !!active && !!columns && columns.scrollLeft < maxScroll - 2);
+        }
+        function setDragPaging(active) {
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            boardPage.classList.toggle('mobile-dragging', active);
+            if (columns) {
+                columns.style.scrollSnapType = active ? 'none' : '';
+                columns.style.scrollBehavior = active ? 'auto' : '';
+            }
         }
         function cancelDrag(current) {
             if (current.ghost) current.ghost.remove();
@@ -143,6 +153,114 @@
             if (current.card.parentNode !== current.sourceContainer) {
                 current.sourceContainer.appendChild(current.card);
             }
+            if (current.scrollFrame) cancelAnimationFrame(current.scrollFrame);
+            if (current.edgePauseTimer) clearTimeout(current.edgePauseTimer);
+            setDragPaging(false);
+            setEdges(false);
+        }
+        function updateDropTarget(current, point) {
+            var target = document.elementFromPoint(point.clientX, point.clientY);
+            if (target === current.placeholder) return;
+            var targetCard = target && target.closest ? target.closest('.kanban-card') : null;
+            if (targetCard === current.card) targetCard = null;
+            var targetContainer = targetCard && targetCard.closest('.col-cards');
+            if (!targetContainer && target && target.closest) targetContainer = target.closest('.col-cards');
+            if (!targetContainer && target && target.closest) {
+                var targetColumn = target.closest('.mobile-board-column');
+                targetContainer = targetColumn && targetColumn.querySelector('.col-cards');
+            }
+            if (!targetContainer) return;
+            current.targetContainer = targetContainer;
+
+            var cards = targetContainer.querySelectorAll('.kanban-card');
+            var before = null;
+            for (var i = 0; i < cards.length; i++) {
+                if (cards[i] === current.card) continue;
+                var rect = cards[i].getBoundingClientRect();
+                if (point.clientY < rect.top + rect.height / 2) {
+                    before = cards[i];
+                    break;
+                }
+            }
+            if (before) {
+                if (current.placeholder.nextSibling !== before) targetContainer.insertBefore(current.placeholder, before);
+            } else if (current.placeholder.parentNode !== targetContainer || current.placeholder.nextSibling) {
+                targetContainer.appendChild(current.placeholder);
+            }
+        }
+        function edgeDirectionFor(current, point) {
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            if (!columns) return 0;
+            var maxScroll = Math.max(0, columns.scrollWidth - columns.clientWidth);
+            if (point.clientX < 72 && columns.scrollLeft > 2) return -1;
+            if (point.clientX > window.innerWidth - 72 && columns.scrollLeft < maxScroll - 2) return 1;
+            return 0;
+        }
+        function nextColumnScrollLeft(columns, direction) {
+            var columnNodes = columns.querySelectorAll('.mobile-board-column');
+            var currentScroll = columns.scrollLeft;
+            var maxScroll = Math.max(0, columns.scrollWidth - columns.clientWidth);
+            var columnsRect = columns.getBoundingClientRect();
+            function snapLeft(column) {
+                var columnRect = column.getBoundingClientRect();
+                var columnLeft = columnRect.left - columnsRect.left + columns.scrollLeft;
+                return Math.max(0, Math.min(maxScroll,
+                    columnLeft - (columns.clientWidth - columnRect.width) / 2));
+            }
+            if (direction > 0) {
+                for (var i = 0; i < columnNodes.length; i++) {
+                    if (snapLeft(columnNodes[i]) > currentScroll + 4) return snapLeft(columnNodes[i]);
+                }
+                return maxScroll;
+            }
+            for (var j = columnNodes.length - 1; j >= 0; j--) {
+                if (snapLeft(columnNodes[j]) < currentScroll - 4) return snapLeft(columnNodes[j]);
+            }
+            return 0;
+        }
+        function continueEdgeScroll(current) {
+            if (!current || !current.dragging || !current.edgeDirection) {
+                if (current) current.scrollFrame = null;
+                return;
+            }
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            if (!columns) return;
+            var animationProgress = Math.min(1, (performance.now() - current.edgeAnimationStart) / 350);
+            var easedProgress = 1 - Math.pow(1 - animationProgress, 3);
+            columns.scrollLeft = current.edgeAnimationFrom +
+                (current.edgeTarget - current.edgeAnimationFrom) * easedProgress;
+            updateDropTarget(current, current.lastPoint);
+            var reachedTarget = animationProgress >= 1;
+            if (reachedTarget) {
+                columns.scrollLeft = current.edgeTarget;
+                current.scrollFrame = null;
+                current.edgeAnimationStart = 0;
+                current.edgePauseDirection = current.edgeDirection;
+                current.edgeDirection = 0;
+                setEdges(true);
+                current.edgePauseTimer = setTimeout(function () {
+                    if (!state || state !== current || !current.dragging) return;
+                    current.edgePauseDirection = 0;
+                    current.edgePauseTimer = null;
+                    current.edgeDirection = edgeDirectionFor(current, current.lastPoint);
+                    if (current.edgeDirection) startEdgeScroll(current);
+                }, 500);
+                return;
+            }
+            current.scrollFrame = requestAnimationFrame(function () { continueEdgeScroll(current); });
+        }
+        function startEdgeScroll(current) {
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            if (!columns || !current.edgeDirection) return;
+            current.edgeTarget = nextColumnScrollLeft(columns, current.edgeDirection);
+            if (current.edgeTarget === columns.scrollLeft) {
+                current.edgeDirection = 0;
+                setEdges(true);
+                return;
+            }
+            current.edgeAnimationFrom = columns.scrollLeft;
+            current.edgeAnimationStart = performance.now();
+            current.scrollFrame = requestAnimationFrame(function () { continueEdgeScroll(current); });
         }
         boardPage.addEventListener('touchstart', function (event) {
             var card = event.target.closest('.kanban-card');
@@ -151,6 +269,9 @@
             state = {
                 card: card, sourceContainer: card.closest('.col-cards'), targetContainer: card.closest('.col-cards'),
                 x: point.clientX, y: point.clientY, dragging: false,
+                lastPoint: {clientX: point.clientX, clientY: point.clientY}, edgeDirection: 0, edgeTarget: 0,
+                edgePauseDirection: 0, edgePauseTimer: null, scrollFrame: null,
+                edgeAnimationStart: 0, edgeAnimationFrom: 0,
                 originalNextSibling: card.nextSibling,
                 originalOrder: Array.prototype.map.call(card.closest('.col-cards').querySelectorAll('.kanban-card'), function (item) {
                     return item.getAttribute('data-id');
@@ -176,6 +297,7 @@
                     // The placeholder replaces the source card in layout. Do
                     // not leave the source occupying a second invisible slot.
                     card.style.display = 'none';
+                    setDragPaging(true);
                     setEdges(true);
                     if (navigator.vibrate) navigator.vibrate(10);
                 }, 350)
@@ -192,30 +314,28 @@
                 return;
             }
             event.preventDefault();
+            state.lastPoint = {clientX: point.clientX, clientY: point.clientY};
             state.ghost.style.left = (point.clientX - state.ghost.offsetWidth / 2) + 'px';
             state.ghost.style.top = (point.clientY - 24) + 'px';
             var columns = boardPage.querySelector('.mobile-board-columns');
             if (columns) {
-                if (point.clientX < 58) columns.scrollLeft -= 12;
-                if (point.clientX > window.innerWidth - 58) columns.scrollLeft += 12;
+                var newEdgeDirection = edgeDirectionFor(state, point);
+                if (state.edgePauseTimer && newEdgeDirection !== state.edgePauseDirection) {
+                    clearTimeout(state.edgePauseTimer);
+                    state.edgePauseTimer = null;
+                    state.edgePauseDirection = 0;
+                }
+                if (!state.edgePauseTimer) {
+                    if (newEdgeDirection !== state.edgeDirection && state.scrollFrame) {
+                        cancelAnimationFrame(state.scrollFrame);
+                        state.scrollFrame = null;
+                    }
+                    state.edgeDirection = newEdgeDirection;
+                    if (state.edgeDirection && !state.scrollFrame) startEdgeScroll(state);
+                }
             }
-            var target = document.elementFromPoint(point.clientX, point.clientY);
-            var targetCard = target && target.closest ? target.closest('.kanban-card') : null;
-            if (targetCard === state.card) targetCard = null;
-            var targetContainer = targetCard && targetCard.closest('.col-cards');
-            if (!targetContainer && target && target.closest) targetContainer = target.closest('.col-cards');
-            if (!targetContainer && target && target.closest) {
-                var targetColumn = target.closest('.mobile-board-column');
-                targetContainer = targetColumn && targetColumn.querySelector('.col-cards');
-            }
-            if (!targetContainer) return;
-            state.targetContainer = targetContainer;
-            if (targetCard && targetCard.parentNode === targetContainer) {
-                var rect = targetCard.getBoundingClientRect();
-                targetContainer.insertBefore(state.placeholder, point.clientY < rect.top + rect.height / 2 ? targetCard : targetCard.nextSibling);
-            } else {
-                targetContainer.appendChild(state.placeholder);
-            }
+            setEdges(true);
+            updateDropTarget(state, point);
         }, {passive: false});
         boardPage.addEventListener('touchend', function (event) {
             if (!state) return;
@@ -236,6 +356,9 @@
             if (current.ghost) current.ghost.remove();
             if (current.placeholder) current.placeholder.remove();
             setEdges(false);
+            setDragPaging(false);
+            if (current.scrollFrame) cancelAnimationFrame(current.scrollFrame);
+            if (current.edgePauseTimer) clearTimeout(current.edgePauseTimer);
             boardPage._suppressClickUntil = Date.now() + 500;
             var sourceColumn = current.sourceContainer.getAttribute('data-column-id');
             var targetColumn = targetContainer.getAttribute('data-column-id');

@@ -3,7 +3,7 @@
         <h1>Giverny</h1>
         {{if .error}}<p class="settings-flash error">{{.error}}</p>{{end}}
         <button type="button" class="passkey-login-btn" id="passkey-login" hidden>sign in with a passkey</button>
-        <div class="mobile-login-divider">or</div>
+        <div class="mobile-login-divider" id="passkey-login-divider" hidden>or</div>
         <form method="post" action="/mobile/login/">
             <input type="hidden" name="redirect" value="{{.redirect}}">
             <label>username<input type="text" name="username" autocomplete="username" required autofocus></label>

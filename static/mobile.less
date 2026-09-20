@@ -119,10 +119,10 @@
     .mobile-board-column .kanban-card.dragging-source { opacity: .35; }
     .touch-drag-placeholder { margin: .6rem 0; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
     .touch-drag-ghost { position: fixed; z-index: 50; pointer-events: none; opacity: .9; transform: rotate(2deg); box-shadow: 0 8px 22px rgba(0,0,0,.25); }
-    .mobile-drag-edge { position: fixed; z-index: 60; top: 45%; width: 2.5rem; height: 4rem; display: flex; align-items: center; justify-content: center; border-radius: .6rem; background: color-mix(in srgb, var(--accent) 85%, var(--surface) 15%); color: var(--button-text); font-size: 2.3rem; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+    .mobile-drag-edge { position: fixed; z-index: 60; top: 4rem; bottom: 1rem; width: 2.4rem; display: flex; align-items: center; justify-content: center; background: transparent; color: var(--accent); font-size: 2.2rem; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
     .mobile-drag-edge.active { opacity: .9; }
-    .mobile-drag-edge-left { left: .35rem; }
-    .mobile-drag-edge-right { right: .35rem; }
+    .mobile-drag-edge-left { left: .25rem; border-left: 2px dashed var(--accent); }
+    .mobile-drag-edge-right { right: .25rem; border-right: 2px dashed var(--accent); }
     .mobile-col-pager { display: flex; justify-content: center; gap: .35rem; }
     .mobile-col-pager span { width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); opacity: .45; }
     .mobile-col-pager span.active { opacity: 1; background: var(--accent); }

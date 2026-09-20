@@ -124,6 +124,8 @@
     var login = document.getElementById('passkey-login');
     if (login) {
         login.hidden = false;
+        var loginDivider = document.getElementById('passkey-login-divider');
+        if (loginDivider) loginDivider.hidden = false;
         login.addEventListener('click', function () {
             login.disabled = true;
             postJSON('/auth/webauthn/login/begin').then(function (options) {
