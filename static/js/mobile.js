@@ -6,6 +6,34 @@
         else fn();
     }
 
+    function base64urlBytes(value) {
+        var padded = value.replace(/-/g, '+').replace(/_/g, '/');
+        while (padded.length % 4) padded += '=';
+        var raw = atob(padded), bytes = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        return bytes;
+    }
+
+    function setupPushNotifications() {
+        if (!document.body.hasAttribute('data-user-timezone')) return;
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+        if (localStorage.getItem('giverny-push-prompted') === '1' || Notification.permission === 'denied') return;
+        navigator.serviceWorker.ready.then(function (registration) {
+            return registration.pushManager.getSubscription().then(function (subscription) {
+                if (subscription) return fetch('/mobile/push/subscribe', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(subscription)});
+                return Notification.requestPermission().then(function (permission) {
+                    localStorage.setItem('giverny-push-prompted', '1');
+                    if (permission !== 'granted') return null;
+                    return fetch('/mobile/push/vapid-key').then(function (response) { return response.json(); }).then(function (key) {
+                        return registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: base64urlBytes(key.publicKey)});
+                    }).then(function (newSubscription) {
+                        return fetch('/mobile/push/subscribe', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newSubscription)});
+                    });
+                });
+            });
+        }).catch(function () {});
+    }
+
     function toggleDrawer(name) {
         var body = document.body;
         var open = name === 'left' ? 'mobile-left-open' : 'mobile-right-open';
@@ -95,13 +123,35 @@
     function setupTouchReorder(boardPage) {
         var slug = boardPage.getAttribute('data-board-slug');
         var state = null;
+        var edgeLeft = document.createElement('div');
+        var edgeRight = document.createElement('div');
+        edgeLeft.className = 'mobile-drag-edge mobile-drag-edge-left';
+        edgeRight.className = 'mobile-drag-edge mobile-drag-edge-right';
+        edgeLeft.textContent = '‹';
+        edgeRight.textContent = '›';
+        boardPage.appendChild(edgeLeft);
+        boardPage.appendChild(edgeRight);
+        function setEdges(active) {
+            edgeLeft.classList.toggle('active', active);
+            edgeRight.classList.toggle('active', active);
+        }
+        function cancelDrag(current) {
+            if (current.ghost) current.ghost.remove();
+            if (current.placeholder) current.placeholder.remove();
+            current.card.style.display = '';
+            current.card.classList.remove('dragging-source');
+            if (current.card.parentNode !== current.sourceContainer) {
+                current.sourceContainer.appendChild(current.card);
+            }
+        }
         boardPage.addEventListener('touchstart', function (event) {
             var card = event.target.closest('.kanban-card');
             if (!card || !card.closest('.col-cards')) return;
             var point = event.touches[0];
             state = {
-                card: card, container: card.closest('.col-cards'),
+                card: card, sourceContainer: card.closest('.col-cards'), targetContainer: card.closest('.col-cards'),
                 x: point.clientX, y: point.clientY, dragging: false,
+                originalNextSibling: card.nextSibling,
                 originalOrder: Array.prototype.map.call(card.closest('.col-cards').querySelectorAll('.kanban-card'), function (item) {
                     return item.getAttribute('data-id');
                 }).join(','),
@@ -113,7 +163,7 @@
                     state.placeholder = document.createElement('div');
                     state.placeholder.className = 'touch-drag-placeholder';
                     state.placeholder.style.height = cardRect.height + 'px';
-                    state.container.insertBefore(state.placeholder, card);
+                    state.sourceContainer.insertBefore(state.placeholder, card);
                     state.ghost = card.cloneNode(true);
                     state.ghost.classList.add('touch-drag-ghost');
                     state.ghost.style.width = cardRect.width + 'px';
@@ -126,6 +176,7 @@
                     // The placeholder replaces the source card in layout. Do
                     // not leave the source occupying a second invisible slot.
                     card.style.display = 'none';
+                    setEdges(true);
                     if (navigator.vibrate) navigator.vibrate(10);
                 }, 350)
             };
@@ -143,11 +194,28 @@
             event.preventDefault();
             state.ghost.style.left = (point.clientX - state.ghost.offsetWidth / 2) + 'px';
             state.ghost.style.top = (point.clientY - 24) + 'px';
+            var columns = boardPage.querySelector('.mobile-board-columns');
+            if (columns) {
+                if (point.clientX < 58) columns.scrollLeft -= 12;
+                if (point.clientX > window.innerWidth - 58) columns.scrollLeft += 12;
+            }
             var target = document.elementFromPoint(point.clientX, point.clientY);
             var targetCard = target && target.closest ? target.closest('.kanban-card') : null;
-            if (!targetCard || targetCard === state.card || targetCard.parentNode !== state.container) return;
-            var rect = targetCard.getBoundingClientRect();
-            state.container.insertBefore(state.placeholder, point.clientY < rect.top + rect.height / 2 ? targetCard : targetCard.nextSibling);
+            if (targetCard === state.card) targetCard = null;
+            var targetContainer = targetCard && targetCard.closest('.col-cards');
+            if (!targetContainer && target && target.closest) targetContainer = target.closest('.col-cards');
+            if (!targetContainer && target && target.closest) {
+                var targetColumn = target.closest('.mobile-board-column');
+                targetContainer = targetColumn && targetColumn.querySelector('.col-cards');
+            }
+            if (!targetContainer) return;
+            state.targetContainer = targetContainer;
+            if (targetCard && targetCard.parentNode === targetContainer) {
+                var rect = targetCard.getBoundingClientRect();
+                targetContainer.insertBefore(state.placeholder, point.clientY < rect.top + rect.height / 2 ? targetCard : targetCard.nextSibling);
+            } else {
+                targetContainer.appendChild(state.placeholder);
+            }
         }, {passive: false});
         boardPage.addEventListener('touchend', function (event) {
             if (!state) return;
@@ -161,20 +229,31 @@
                 }
                 return;
             }
-            current.container.insertBefore(current.card, current.placeholder);
+            var targetContainer = current.placeholder && current.placeholder.parentNode && current.placeholder.parentNode.classList.contains('col-cards') ? current.placeholder.parentNode : current.sourceContainer;
+            targetContainer.insertBefore(current.card, current.placeholder || null);
             current.card.style.display = '';
             current.card.classList.remove('dragging-source');
             if (current.ghost) current.ghost.remove();
             if (current.placeholder) current.placeholder.remove();
-            updateOrder(slug, current.container.getAttribute('data-column-id'), current.container, current.originalOrder);
+            setEdges(false);
+            boardPage._suppressClickUntil = Date.now() + 500;
+            var sourceColumn = current.sourceContainer.getAttribute('data-column-id');
+            var targetColumn = targetContainer.getAttribute('data-column-id');
+            if (sourceColumn === targetColumn) {
+                updateOrder(slug, targetColumn, targetContainer, current.originalOrder);
+                return;
+            }
+            var position = Array.prototype.indexOf.call(targetContainer.querySelectorAll('.kanban-card'), current.card);
+            fetch('/boards/' + encodeURIComponent(slug) + '/cards/' + current.card.getAttribute('data-id') + '/move', {
+                method: 'POST',
+                body: new URLSearchParams({column_id: targetColumn, position: String(Math.max(0, position))})
+            }).catch(function () {});
         }, {passive: true});
         boardPage.addEventListener('touchcancel', function () {
             if (!state) return;
             clearTimeout(state.timer);
-            if (state.ghost) state.ghost.remove();
-            if (state.placeholder) state.placeholder.remove();
-            state.card.style.display = '';
-            state.card.classList.remove('dragging-source');
+            cancelDrag(state);
+            setEdges(false);
             state = null;
         }, {passive: true});
     }
@@ -182,8 +261,12 @@
     ready(function () {
         var left = document.getElementById('mobile-left-toggle');
         var right = document.getElementById('mobile-right-toggle');
+        var backdrop = document.getElementById('mobile-drawer-backdrop');
         if (left) left.addEventListener('click', function () { toggleDrawer('left'); });
         if (right) right.addEventListener('click', function () { toggleDrawer('right'); });
+        if (backdrop) backdrop.addEventListener('click', function () {
+            document.body.classList.remove('mobile-left-open', 'mobile-right-open');
+        });
         document.addEventListener('click', function (event) {
             if (!event.target.closest('.mobile-topbar') && !event.target.closest('.mobile-drawer-left') && !event.target.closest('.mobile-drawer-right')) {
                 document.body.classList.remove('mobile-left-open', 'mobile-right-open');
@@ -206,7 +289,7 @@
         if (boardPage) {
             boardPage.addEventListener('click', function (event) {
                 var card = event.target.closest('.kanban-card');
-                if (card && !event.defaultPrevented) window.location.href = '/mobile/boards/' + encodeURIComponent(boardPage.getAttribute('data-board-slug')) + '/cards/' + card.getAttribute('data-id') + '/';
+                if (card && !event.defaultPrevented && Date.now() >= (boardPage._suppressClickUntil || 0)) window.location.href = '/mobile/boards/' + encodeURIComponent(boardPage.getAttribute('data-board-slug')) + '/cards/' + card.getAttribute('data-id') + '/';
             });
             setupNativeReorder(boardPage);
             setupTouchReorder(boardPage);
@@ -214,6 +297,15 @@
         if (boardPage && window.createBoardSocket) {
             var slug = boardPage.getAttribute('data-board-slug');
             var hadError = false;
+            function refreshColumn(columnID) {
+                if (!columnID) return;
+                fetch('/mobile/boards/' + encodeURIComponent(slug) + '/columns/' + columnID + '/cards')
+                    .then(function (response) { return response.text(); })
+                    .then(function (html) {
+                        var target = document.querySelector('.col-cards[data-column-id="' + columnID + '"]');
+                        if (target) target.innerHTML = html;
+                    }).catch(function () {});
+            }
             window.createBoardSocket(slug, {
                 onStateChange: function (state) {
                     var banner = document.getElementById('ws-banner');
@@ -226,17 +318,18 @@
                     if (payload.column_id) ids.push(payload.column_id);
                     if (payload.from_column_id) ids.push(payload.from_column_id);
                     if (payload.to_column_id) ids.push(payload.to_column_id);
+                    if (!ids.length && payload.card_id) {
+                        var card = document.querySelector('.kanban-card[data-id="' + payload.card_id + '"]');
+                        var column = card && card.closest('.mobile-board-column');
+                        if (column) ids.push(column.getAttribute('data-column-id'));
+                    }
                     if (/^column\./.test(event.type)) { window.location.reload(); return; }
-                    ids.forEach(function (id) {
-                        fetch('/mobile/boards/' + encodeURIComponent(slug) + '/columns/' + id + '/cards')
-                            .then(function (response) { return response.text(); })
-                            .then(function (html) {
-                                var target = document.querySelector('.col-cards[data-column-id="' + id + '"]');
-                                if (target) target.innerHTML = html;
-                            }).catch(function () {});
-                    });
+                    ids.forEach(refreshColumn);
                 }
             }).connect();
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) window.location.reload();
+            });
         }
         var cardPage = document.querySelector('.mobile-card-page');
         if (cardPage && window.createBoardSocket) {
@@ -253,6 +346,8 @@
                 }).connect();
             }
         }
-        if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js', {scope: '/mobile/'}).catch(function () {});
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js', {scope: '/mobile/'}).then(setupPushNotifications).catch(function () {});
+        }
     });
 }());

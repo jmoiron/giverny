@@ -106,6 +106,20 @@ func (a *App) CanModifyBoard(board *Board, user *gauth.User) bool {
 	return canModifyBoard(board, user)
 }
 
+// PresetCardListPage exposes the shared card-list query/view-model builder to
+// presentation layers such as the mobile app.
+func (a *App) PresetCardListPage(r *http.Request, user *gauth.User, title, path string, preset url.Values) (mtr.Ctx, error) {
+	q := mergeQueryValues(preset, r.URL.Query())
+	ctx, err := a.buildCardListPage(r, user, q, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	ctx["title"] = title
+	ctx["pageTitle"] = title
+	ctx["filterPanelOpen"] = false
+	return ctx, nil
+}
+
 // RenderedColumns returns the same card snippet view model used by the
 // desktop board page.
 func (a *App) RenderedColumns(r *http.Request, board *Board, canEdit bool) ([]*ColumnWithRenderedCards, error) {

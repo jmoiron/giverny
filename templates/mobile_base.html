@@ -13,7 +13,7 @@
     <script src="/static/js/app.js" defer></script>
     <script src="/static/js/ws-client.js" defer></script>
     <script src="/static/js/webauthn.js" defer></script>
-    {{if .mobileCard}}<script src="/static/js/kanban.js" defer></script>{{end}}
+    {{if .mobileCard}}<script src="/static/js/card-detail.js" defer></script><script src="/static/js/kanban.js" defer></script>{{end}}
     <script src="/static/js/mobile.js" defer></script>
     <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
 </head>
@@ -28,20 +28,31 @@
     </header>
     <aside class="mobile-drawer-left" id="mobile-drawer-left">
         <nav class="side-nav-inner">
-            <a href="/cards/my-tasks/" class="side-nav-item">my tasks</a>
-            <a href="/cards/subscribed/" class="side-nav-item">subscribed</a>
-            <a href="/cards/in-progress/" class="side-nav-item">in progress</a>
-            <div class="side-nav-section-label">boards</div>
+            <a href="/mobile/cards/my-tasks/" class="side-nav-item"><i class="fa-solid fa-user side-nav-icon"></i><span>my tasks</span></a>
+            <a href="/mobile/cards/subscribed/" class="side-nav-item"><i class="fa-solid fa-bell side-nav-icon"></i><span>subscribed</span></a>
+            <a href="/mobile/cards/in-progress/" class="side-nav-item"><i class="fa-regular fa-clock side-nav-icon"></i><span>in progress</span></a>
+            <div class="side-nav-section-label"><i class="fa-solid fa-table-columns side-nav-icon"></i><span>boards</span></div>
             <div id="side-nav-boards" class="side-nav-boards"></div>
-            <a href="/cards/views/" id="side-nav-views-label" class="side-nav-section-label hidden">views</a>
+            <a href="/cards/views/" id="side-nav-views-label" class="side-nav-section-label hidden"><i class="fa-solid fa-bookmark side-nav-icon"></i><span>views</span></a>
             <div id="side-nav-views" class="side-nav-boards"></div>
         </nav>
     </aside>
     <aside class="mobile-drawer-right" id="mobile-drawer-right">
         {{if .user}}
-        <div class="mobile-user-card"><strong>{{.user.Username}}</strong><a href="/user/settings/">settings</a><button id="theme-toggle">toggle theme</button><a href="/mobile/logout/">logout</a></div>
+        <div class="mobile-user-card">
+            <strong>{{.user.Username}}</strong>
+            <a href="/mobile/user/settings/"><i class="fa-solid fa-gear"></i><span>settings</span></a>
+            <a href="/?desktop=1"><i class="fa-solid fa-desktop"></i><span>desktop site</span></a>
+            <button id="theme-toggle" class="mobile-theme-toggle" title="toggle theme">
+                <i class="fa-regular fa-sun"></i>
+                <i class="fa-solid fa-moon"></i>
+                <span class="theme-toggle-pill"></span>
+            </button>
+            <a href="/mobile/logout/"><i class="fa-solid fa-right-from-bracket"></i><span>logout</span></a>
+        </div>
         {{end}}
     </aside>
+    <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop"></div>
     {{if .user}}
     <div id="passkey-prompt" class="passkey-prompt" hidden role="dialog" aria-labelledby="passkey-prompt-title">
         <div class="passkey-prompt-card">

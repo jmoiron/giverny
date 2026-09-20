@@ -16,6 +16,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/go-sprout/sprout v0.6.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

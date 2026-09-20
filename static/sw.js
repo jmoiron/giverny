@@ -1,11 +1,13 @@
-const CACHE = 'giverny-mobile-v5';
+const CACHE = 'giverny-mobile-v10';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',
   '/static/js/cash.min.js',
   '/static/js/ws-client.js',
   '/static/js/kanban.js',
+  '/static/js/card-detail.js',
   '/static/js/mobile.js',
+  '/static/js/webauthn.js',
   '/static/mobile.css',
   '/static/manifest.webmanifest',
   '/static/icons/icon-192.png',

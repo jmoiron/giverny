@@ -91,6 +91,10 @@ func (a *App) Bind(r chi.Router) {
 		r.Post("/", a.handleUserSettingsSave)
 		r.Post("/avatar-upload", a.handleAvatarUpload)
 	})
+	r.Route("/mobile/user/settings", func(r chi.Router) {
+		r.Use(RequireAuth)
+		r.Get("/", a.handleMobileUserSettings)
+	})
 
 	r.Route("/auth/webauthn", func(r chi.Router) {
 		r.Post("/login/begin", a.handleWebAuthnLoginBegin)
@@ -328,8 +332,12 @@ func validTimezone(tz string) bool {
 }
 
 func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *User, errMsg string, saved bool) {
+	a.renderUserSettingsWithBase(w, r, "base", user, errMsg, saved)
+}
+
+func (a *App) renderUserSettingsWithBase(w http.ResponseWriter, r *http.Request, base string, user *User, errMsg string, saved bool) {
 	reg := mtr.RegistryFromContext(r.Context())
-	if err := reg.RenderWithBase(w, "base", "auth/settings.html", mtr.Ctx{
+	if err := reg.RenderWithBase(w, base, "auth/settings.html", mtr.Ctx{
 		"title":     "settings",
 		"user":      user,
 		"timezones": settingsTimezones,
@@ -338,6 +346,10 @@ func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *U
 	}); err != nil {
 		app.Http500("rendering settings", w, err)
 	}
+}
+
+func (a *App) handleMobileUserSettings(w http.ResponseWriter, r *http.Request) {
+	a.renderUserSettingsWithBase(w, r, "mobile-base", UserFromContext(r.Context()), "", false)
 }
 
 func (a *App) handleUserSettings(w http.ResponseWriter, r *http.Request) {

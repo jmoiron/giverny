@@ -25,6 +25,26 @@
     .mobile-avatar { width: 2rem; height: 2rem; display: block; border-radius: 50%; object-fit: cover; background: var(--hover-bg); }
 
     .mobile-page { padding: 1rem; }
+    .mobile-app .user-settings { max-width: 100%; padding: .25rem 0; }
+    .mobile-app .user-settings form:not(.invite-form):not(.role-form) { grid-template-columns: 6.5rem minmax(0, 1fr); row-gap: 1rem; }
+    .mobile-app .user-settings form:not(.invite-form):not(.role-form)>div { column-gap: .75rem; }
+    .mobile-app .user-settings .settings-inline-row { flex-wrap: wrap; }
+    .mobile-app .user-settings .settings-inline-row>input,
+    .mobile-app .user-settings .settings-inline-row>select { min-width: 0; }
+    .mobile-app .user-settings .settings-profile-block { gap: .7rem; }
+    .mobile-app .user-settings .settings-avatar { width: 52px; height: 52px; }
+    .mobile-card-list-page { padding: 1rem .75rem; }
+    .mobile-list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; margin-bottom: .8rem; }
+    .mobile-list-heading h1 { margin: 0; font-size: 1.5rem; }
+    .mobile-list-heading span { color: var(--muted); font-size: .9rem; }
+    .mobile-card-list { display: grid; gap: .7rem; }
+    .mobile-list-card { display: block; padding: .85rem; color: var(--text); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .mobile-list-card:active { background: var(--hover-bg); }
+    .mobile-list-card-title { display: flex; align-items: flex-start; gap: .55rem; line-height: 1.25; }
+    .mobile-list-card-color { width: .28rem; min-width: .28rem; min-height: 1.25rem; border-radius: .2rem; background: var(--border); }
+    .mobile-list-card-context { margin: .35rem 0 .5rem .85rem; color: var(--muted); font-size: .84rem; }
+    .mobile-list-card-labels { display: flex; flex-wrap: wrap; gap: .3rem; margin-left: .85rem; }
+    .mobile-list-card-meta { display: flex; flex-wrap: wrap; gap: .7rem; margin: .65rem 0 0 .85rem; color: var(--muted); font-size: .8rem; }
     .mobile-home-boards { display: grid; gap: 0.7rem; }
     .mobile-home-board {
         display: flex;
@@ -48,11 +68,45 @@
         box-shadow: 3px 0 12px rgba(0,0,0,.2);
         transition: transform .2s ease;
     }
+    .mobile-drawer-backdrop {
+        position: fixed;
+        z-index: 14;
+        inset: 3.4rem 0 0;
+        background: rgba(0, 0, 0, .35);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .2s ease;
+    }
+    &.mobile-left-open .mobile-drawer-backdrop, &.mobile-right-open .mobile-drawer-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
     .mobile-drawer-left { left: 0; width: min(84vw, 280px); transform: translateX(-105%); overflow-y: auto; }
     .mobile-drawer-right { right: 0; width: 100vw; transform: translateX(105%); }
-    .mobile-left-open .mobile-drawer-left, .mobile-right-open .mobile-drawer-right { transform: translateX(0); }
-    .mobile-user-card { display: flex; flex-direction: column; gap: 1rem; padding: 2rem; font-size: 1.1rem; }
-    .mobile-user-card a, .mobile-user-card button { text-align: left; padding: .75rem 0; background: none; border: 0; color: var(--link); font: inherit; }
+    &.mobile-left-open .mobile-drawer-left, &.mobile-right-open .mobile-drawer-right { transform: translateX(0); }
+    .mobile-drawer-left .side-nav-inner { padding: .85rem .5rem 1rem; }
+    .mobile-drawer-left .side-nav-item, .mobile-drawer-left .side-nav-section-label {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        padding: .65rem .75rem;
+        border-radius: 5px;
+        color: var(--text);
+        text-decoration: none;
+        font-size: .95rem;
+    }
+    .mobile-drawer-left .side-nav-item:hover, .mobile-drawer-left a.side-nav-section-label:hover { background: var(--hover-bg); }
+    .mobile-drawer-left .side-nav-icon { width: 1.1rem; text-align: center; color: var(--muted); flex-shrink: 0; }
+    .mobile-drawer-left .side-nav-section-label { font-weight: 600; margin-top: .5rem; }
+    .mobile-drawer-left .side-nav-boards { padding-left: 1.75rem; }
+    .mobile-drawer-left .side-nav-board-link { display: block; padding: .45rem .65rem; border-radius: 4px; color: var(--muted); text-decoration: none; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mobile-drawer-left .side-nav-board-link:hover { background: var(--hover-bg); color: var(--text); }
+    .mobile-user-card { display: flex; flex-direction: column; gap: .5rem; padding: 2rem; font-size: 1.1rem; }
+    .mobile-user-card strong { padding-bottom: .75rem; border-bottom: 1px solid var(--border); }
+    .mobile-user-card a, .mobile-user-card button { display: flex; align-items: center; gap: .75rem; text-align: left; padding: .75rem 0; background: none; border: 0; color: var(--link); font: inherit; text-decoration: none; }
+    .mobile-user-card a i, .mobile-user-card button > i { width: 1.1rem; text-align: center; color: var(--muted); }
+    .mobile-user-card .mobile-theme-toggle { cursor: pointer; }
+    .mobile-user-card .mobile-theme-toggle .theme-toggle-pill { margin-left: 0; }
 
     .mobile-board-heading { display: flex; align-items: baseline; gap: .6rem; }
     .mobile-board-heading h1 { margin: 0; }
@@ -65,6 +119,10 @@
     .mobile-board-column .kanban-card.dragging-source { opacity: .35; }
     .touch-drag-placeholder { margin: .6rem 0; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
     .touch-drag-ghost { position: fixed; z-index: 50; pointer-events: none; opacity: .9; transform: rotate(2deg); box-shadow: 0 8px 22px rgba(0,0,0,.25); }
+    .mobile-drag-edge { position: fixed; z-index: 60; top: 45%; width: 2.5rem; height: 4rem; display: flex; align-items: center; justify-content: center; border-radius: .6rem; background: color-mix(in srgb, var(--accent) 85%, var(--surface) 15%); color: var(--button-text); font-size: 2.3rem; line-height: 1; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+    .mobile-drag-edge.active { opacity: .9; }
+    .mobile-drag-edge-left { left: .35rem; }
+    .mobile-drag-edge-right { right: .35rem; }
     .mobile-col-pager { display: flex; justify-content: center; gap: .35rem; }
     .mobile-col-pager span { width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); opacity: .45; }
     .mobile-col-pager span.active { opacity: 1; background: var(--accent); }

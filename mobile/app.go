@@ -14,6 +14,7 @@ import (
 	"github.com/jmoiron/monet/app"
 	mauth "github.com/jmoiron/monet/auth"
 	"github.com/jmoiron/monet/db"
+	"github.com/jmoiron/monet/db/monarch"
 	"github.com/jmoiron/monet/mtr"
 	"github.com/jmoiron/monet/pkg/vfs"
 )
@@ -30,18 +31,28 @@ type App struct {
 	gauth     *gauth.App
 	monetAuth *mauth.App
 	fss       vfs.Registry
+	push      *PushService
 }
 
 func NewApp(dbh db.DB, cfg *conf.Config, kanbanApp *kanban.App, gauthApp *gauth.App, monetAuth *mauth.App, fss vfs.Registry) *App {
-	return &App{db: dbh, cfg: cfg, kanban: kanbanApp, gauth: gauthApp, monetAuth: monetAuth, fss: fss}
+	return &App{db: dbh, cfg: cfg, kanban: kanbanApp, gauth: gauthApp, monetAuth: monetAuth, fss: fss, push: NewPushService(dbh, cfg, kanbanApp)}
 }
 
-func (a *App) Name() string   { return "mobile" }
-func (a *App) Migrate() error { return nil }
+func (a *App) Name() string { return "mobile" }
+func (a *App) Migrate() error {
+	m, err := monarch.NewManager(a.db)
+	if err != nil {
+		return err
+	}
+	return m.Upgrade(PushMigrations)
+}
+
+func (a *App) PushNotifier() kanban.PushNotifier { return a.push }
 
 func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("mobile/login.html", templates)
 	reg.AddPathFS("mobile/home.html", templates)
+	reg.AddPathFS("mobile/cards.html", templates)
 	reg.AddPathFS("mobile/board.html", templates)
 	reg.AddPathFS("mobile/card.html", templates)
 }
@@ -55,9 +66,15 @@ func (a *App) Bind(r chi.Router) {
 	r.Route("/mobile", func(r chi.Router) {
 		r.Use(a.RequireAuth)
 		r.Get("/", a.handleHome)
+		r.Get("/cards/my-tasks/", a.handleMyTasks)
+		r.Get("/cards/subscribed/", a.handleSubscribedCards)
+		r.Get("/cards/in-progress/", a.handleInProgressCards)
 		r.Get("/boards/{slug}/", a.handleBoardDetail)
 		r.Get("/boards/{slug}/columns/{colID}/cards", a.handleColumnCardsPartial)
 		r.Get("/boards/{slug}/cards/{cardID}/", a.handleCardDetail)
+		r.Get("/push/vapid-key", a.handleVAPIDPublicKey)
+		r.Post("/push/subscribe", a.handlePushSubscribe)
+		r.Post("/push/unsubscribe", a.handlePushUnsubscribe)
 	})
 }
 

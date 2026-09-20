@@ -3293,7 +3293,7 @@ $(function() {
 
     // Shared by the mobile card page, which uses the same card-detail DOM
     // without the desktop modal shell.
-    window.CardDetail = {
-        applyEvent: applyBoardEvent
-    };
+    if (window.CardDetail && window.CardDetail.register) {
+        window.CardDetail.register(applyBoardEvent);
+    }
 });

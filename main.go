@@ -35,8 +35,9 @@ import (
 )
 
 const (
-	cfgEnvVar      = "GIVERNY_CONFIG_PATH"
-	givernyVersion = "0.0.1"
+	cfgEnvVar           = "GIVERNY_CONFIG_PATH"
+	givernyVersion      = "0.0.1"
+	preferredViewCookie = "giverny-preferred-view"
 )
 
 //go:embed static
@@ -170,6 +171,7 @@ func main() {
 
 	kanbanApp := kanban.NewApp(dbh, fss)
 	mobileApp := mobile.NewApp(dbh, cfg, kanbanApp, gauthApp, authApp, fss)
+	kanbanApp.SetPushNotifier(mobileApp.PushNotifier())
 
 	// apps is the ordered list of sub-applications. Auth must come first
 	// since other tables reference user(id).
@@ -243,6 +245,20 @@ func main() {
 
 func home(kanbanApp *kanban.App) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("desktop") == "1" {
+			setPreferredView(w, "desktop")
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if r.URL.Query().Get("mobile") == "1" {
+			setPreferredView(w, "mobile")
+			http.Redirect(w, r, "/mobile/", http.StatusSeeOther)
+			return
+		}
+		if shouldRedirectToMobile(r) {
+			http.Redirect(w, r, "/mobile/", http.StatusSeeOther)
+			return
+		}
 		reg := mtr.RegistryFromContext(r.Context())
 		u := gauth.UserFromContext(r.Context())
 		ctx := mtr.Ctx{
@@ -284,6 +300,38 @@ func home(kanbanApp *kanban.App) http.HandlerFunc {
 			app.Http500("rendering index", w, err)
 		}
 	}
+}
+
+func setPreferredView(w http.ResponseWriter, view string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     preferredViewCookie,
+		Value:    view,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func shouldRedirectToMobile(r *http.Request) bool {
+	if cookie, err := r.Cookie(preferredViewCookie); err == nil {
+		switch cookie.Value {
+		case "desktop":
+			return false
+		case "mobile":
+			return true
+		}
+	}
+	// Sec-CH-UA-Mobile is the least ambiguous signal when a browser sends it.
+	if r.Header.Get("Sec-CH-UA-Mobile") == "?1" {
+		return true
+	}
+	ua := strings.ToLower(r.UserAgent())
+	for _, token := range []string{"android", "iphone", "ipad", "ipod", "mobile", "tablet"} {
+		if strings.Contains(ua, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func showMigration(dbh db.DB) {

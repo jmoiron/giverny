@@ -7,3 +7,4 @@ icons:
 
 css:
 	lessc --clean-css style.less style.css
+	lessc --clean-css mobile.less mobile.css
