@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -131,6 +132,7 @@ func (a *App) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Reques
 	}
 	credential, err := a.webAuthn.FinishRegistration(waUser, session, r)
 	if err != nil {
+		slog.Error("finishing passkey registration", "user_id", user.ID, "origin", r.Header.Get("Origin"), "user_agent", r.UserAgent(), "err", err)
 		http.Error(w, "passkey registration failed", http.StatusBadRequest)
 		return
 	}
