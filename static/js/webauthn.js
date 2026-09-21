@@ -74,6 +74,7 @@
     if (register && list && status) {
         function loadCredentials() {
             fetch('/auth/webauthn/credentials').then(function (response) { return response.json(); }).then(function (credentials) {
+                credentials = Array.isArray(credentials) ? credentials : [];
                 list.innerHTML = '';
                 credentials.forEach(function (credential) {
                     var item = document.createElement('li');
@@ -102,7 +103,7 @@
             if (!response.ok) throw new Error('could not check passkeys');
             return response.json();
         }).then(function (credentials) {
-            if (!credentials.length) prompt.hidden = false;
+            if (!Array.isArray(credentials) || !credentials.length) prompt.hidden = false;
         }).catch(function () {});
         document.getElementById('passkey-prompt-dismiss').addEventListener('click', function () {
             prompt.hidden = true;

@@ -65,7 +65,9 @@ func stringsTrimRight(s string) string {
 }
 
 func (s *UserProfileService) listWebAuthnCredentials(userID int64) ([]WebAuthnCredential, error) {
-	var rows []WebAuthnCredential
+	// Keep the JSON representation stable for clients: a user with no
+	// passkeys should receive [] rather than null.
+	rows := make([]WebAuthnCredential, 0)
 	err := s.db.Select(&rows, `SELECT id, user_id, credential_id, public_key, attestation_type, transports, sign_count, clone_warning, aaguid, credential_json, name, created_at, last_used_at FROM webauthn_credential WHERE user_id=? ORDER BY created_at, id`, userID)
 	return rows, err
 }
