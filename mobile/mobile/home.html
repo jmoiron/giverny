@@ -1,0 +1,13 @@
+<main class="mobile-page mobile-home">
+    <h1>boards</h1>
+    {{if .boards}}
+    <div class="mobile-home-boards">
+        {{range .boards}}
+        <a class="mobile-home-board" href="/mobile/boards/{{.Slug}}/">
+            <strong>{{.Name}}</strong>
+            {{if .Description}}<span>{{.Description}}</span>{{end}}
+        </a>
+        {{end}}
+    </div>
+    {{else}}<p class="empty-state">no boards with cards yet</p>{{end}}
+</main>

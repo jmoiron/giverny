@@ -50,6 +50,25 @@
                 </label>
             </div>
         </div>
+
+        <div>
+            <span class="settings-label-spacer" aria-hidden="true"></span>
+            <div class="settings-checkbox-row">
+                <label class="settings-checkbox">
+                    <input type="checkbox" name="disable_passkey_prompt" id="disable-passkey-prompt"{{if .user.DisablePasskeyPrompt}} checked{{end}}>
+                    <span>don't prompt me to create a passkey after signing in</span>
+                </label>
+            </div>
+        </div>
+        <div>
+            <label for="passkey-register">passkeys</label>
+            <div class="settings-passkeys" id="passkey-settings">
+                <button type="button" id="passkey-register">add passkey</button>
+                <p class="settings-flash" id="passkey-status" hidden></p>
+                <p class="settings-help" id="passkey-unsupported" hidden>Passkeys require a secure connection, such as HTTPS or localhost.</p>
+                <ul class="passkey-list" id="passkey-list"></ul>
+            </div>
+        </div>
     </form>
 </div>
 

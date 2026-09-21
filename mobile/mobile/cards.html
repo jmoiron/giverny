@@ -1,0 +1,31 @@
+<main class="mobile-page mobile-card-list-page">
+    <div class="mobile-list-heading">
+        <h1>{{.pageTitle}}</h1>
+        <span>{{len .cards}}</span>
+    </div>
+    {{if .cards}}
+    <div class="mobile-card-list">
+        {{range .cards}}
+        <a class="mobile-list-card" href="/mobile/boards/{{.BoardSlug}}/cards/{{.ID}}/">
+            <div class="mobile-list-card-title">
+                <span class="mobile-list-card-color"{{if .Color}} style="background: {{.Color}}"{{end}}></span>
+                <strong>{{.Title}}</strong>
+            </div>
+            <div class="mobile-list-card-context">{{.BoardName}} · {{.ColumnName}}</div>
+            {{if .Labels}}
+            <div class="mobile-list-card-labels">
+                {{range .Labels}}<span class="label-pill {{.TextClass}}" style="--label-color: {{.Color}}">{{.Title}}</span>{{end}}
+            </div>
+            {{end}}
+            <div class="mobile-list-card-meta">
+                {{if .DueDateDisplay}}<span><i class="fa-solid fa-calendar"></i> {{.DueDateDisplay}}</span>{{end}}
+                {{if .CommentCount}}<span><i class="fa-solid fa-comments"></i> {{.CommentCount}}</span>{{end}}
+                {{if .ChecklistTotal}}<span><i class="fa-solid fa-list-check"></i> {{.ChecklistDone}}/{{.ChecklistTotal}}</span>{{end}}
+            </div>
+        </a>
+        {{end}}
+    </div>
+    {{else}}
+    <p class="empty-state">no cards found</p>
+    {{end}}
+</main>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f5f5f5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon-180.png">
+    {{if .debug}}<link rel="stylesheet/less" href="/static/style.less"><script src="/static/js/less.min.js"></script>{{else}}<link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/mobile.css">{{end}}
+    <script src="/static/js/cash.min.js"></script>
+    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/ws-client.js" defer></script>
+    <script src="/static/js/webauthn.js" defer></script>
+    {{if .mobileCard}}<script src="/static/js/card-detail.js" defer></script><script src="/static/js/kanban.js" defer></script>{{end}}
+    <script src="/static/js/mobile.js" defer></script>
+    <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
+</head>
+<body class="mobile-app"{{if .user}} data-user-timezone="{{.user.Timezone}}" data-disable-passkey-prompt="{{if .user.DisablePasskeyPrompt}}1{{else}}0{{end}}"{{end}}>
+    <header class="mobile-topbar">
+        <button id="mobile-left-toggle" aria-label="open navigation"><i class="fa-solid fa-bars"></i></button>
+        <a href="/mobile/" class="logo">Giverny</a>
+        {{if .user}}<button id="mobile-right-toggle" aria-label="open user menu">
+            {{if .user.ProfileImageURI}}<img class="mobile-avatar" src="{{.user.ProfileImageURI}}" alt="">{{else}}<span class="mobile-avatar avatar-fallback" aria-hidden="true"></span>{{end}}
+        </button>{{end}}
+        <div id="ws-banner" class="ws-banner is-hidden">reconnecting…</div>
+    </header>
+    <aside class="mobile-drawer-left" id="mobile-drawer-left">
+        <nav class="side-nav-inner">
+            <a href="/mobile/cards/my-tasks/" class="side-nav-item"><i class="fa-solid fa-user side-nav-icon"></i><span>my tasks</span></a>
+            <a href="/mobile/cards/subscribed/" class="side-nav-item"><i class="fa-solid fa-bell side-nav-icon"></i><span>subscribed</span></a>
+            <a href="/mobile/cards/in-progress/" class="side-nav-item"><i class="fa-regular fa-clock side-nav-icon"></i><span>in progress</span></a>
+            <div class="side-nav-section-label"><i class="fa-solid fa-table-columns side-nav-icon"></i><span>boards</span></div>
+            <div id="side-nav-boards" class="side-nav-boards"></div>
+            <a href="/cards/views/" id="side-nav-views-label" class="side-nav-section-label hidden"><i class="fa-solid fa-bookmark side-nav-icon"></i><span>views</span></a>
+            <div id="side-nav-views" class="side-nav-boards"></div>
+        </nav>
+    </aside>
+    <aside class="mobile-drawer-right" id="mobile-drawer-right">
+        {{if .user}}
+        <div class="mobile-user-card">
+            <strong>{{.user.Username}}</strong>
+            <a href="/mobile/user/settings/"><i class="fa-solid fa-gear"></i><span>settings</span></a>
+            <a href="/?desktop=1"><i class="fa-solid fa-desktop"></i><span>desktop site</span></a>
+            <button id="theme-toggle" class="mobile-theme-toggle" title="toggle theme">
+                <i class="fa-regular fa-sun"></i>
+                <i class="fa-solid fa-moon"></i>
+                <span class="theme-toggle-pill"></span>
+            </button>
+            <a href="/mobile/logout/"><i class="fa-solid fa-right-from-bracket"></i><span>logout</span></a>
+        </div>
+        {{end}}
+    </aside>
+    <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop"></div>
+    {{if .user}}
+    <div id="passkey-prompt" class="passkey-prompt" hidden role="dialog" aria-labelledby="passkey-prompt-title">
+        <div class="passkey-prompt-card">
+            <h2 id="passkey-prompt-title">create a passkey?</h2>
+            <p>Sign in faster next time with your device’s fingerprint, face unlock, or PIN.</p>
+            <div class="passkey-prompt-actions">
+                <button type="button" id="passkey-prompt-dismiss">not now</button>
+                <button type="button" id="passkey-prompt-create">create passkey</button>
+            </div>
+            <p class="settings-flash error" id="passkey-prompt-status" hidden></p>
+        </div>
+    </div>
+    {{end}}
+    {{.body}}
+</body>
+</html>

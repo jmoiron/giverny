@@ -324,6 +324,9 @@ $(function() {
         } else if (field === 'auto_assign_cards') {
             formData.set('auto_assign_cards_present', '1');
             if ($('#auto-assign-cards').is(':checked')) formData.set('auto_assign_cards', '1');
+        } else if (field === 'disable_passkey_prompt') {
+            formData.set('disable_passkey_prompt_present', '1');
+            if ($('#disable-passkey-prompt').is(':checked')) formData.set('disable_passkey_prompt', '1');
         } else {
             return;
         }
@@ -357,6 +360,9 @@ $(function() {
                 }
                 if (field === 'auto_assign_cards' && typeof data.auto_assign_cards !== 'undefined') {
                     $('#auto-assign-cards').prop('checked', !!data.auto_assign_cards);
+                }
+                if (field === 'disable_passkey_prompt' && typeof data.disable_passkey_prompt !== 'undefined') {
+                    $('#disable-passkey-prompt').prop('checked', !!data.disable_passkey_prompt);
                 }
                 if (field === 'profile_image_uri') avatarDirty = false;
             })
@@ -406,6 +412,9 @@ $(function() {
 
     $('#auto-assign-cards').on('change', function() {
         scheduleSettingsSave(0, 'auto_assign_cards');
+    });
+    $('#disable-passkey-prompt').on('change', function() {
+        scheduleSettingsSave(0, 'disable_passkey_prompt');
     });
 
     var $avatarUploadModal = $('#avatar-upload-modal');

@@ -15,15 +15,16 @@ const bcryptCost = bcrypt.DefaultCost
 
 // User is the combined view of monet's user row joined with giverny's user_profile row.
 type User struct {
-	ID              int64      `db:"id"`
-	Username        string     `db:"username"`
-	Email           string     `db:"email"`
-	Role            string     `db:"role"`
-	ProfileImageURI string     `db:"profile_image_uri"`
-	Timezone        string     `db:"timezone"`
-	AutoAssignCards bool       `db:"auto_assign_cards"`
-	CreatedAt       time.Time  `db:"created_at"`
-	LastLoginAt     *time.Time `db:"last_login_at"`
+	ID                   int64      `db:"id"`
+	Username             string     `db:"username"`
+	Email                string     `db:"email"`
+	Role                 string     `db:"role"`
+	ProfileImageURI      string     `db:"profile_image_uri"`
+	Timezone             string     `db:"timezone"`
+	AutoAssignCards      bool       `db:"auto_assign_cards"`
+	DisablePasskeyPrompt bool       `db:"disable_passkey_prompt"`
+	CreatedAt            time.Time  `db:"created_at"`
+	LastLoginAt          *time.Time `db:"last_login_at"`
 }
 
 func (u *User) IsAdmin() bool {
@@ -37,6 +38,20 @@ func (u *User) IsSuperAdmin() bool {
 // UserProfileService manages the combined user+user_profile tables.
 type UserProfileService struct {
 	db db.DB
+}
+
+// Validate checks the password in monet's user table. It is exposed here so
+// presentation layers can provide an alternate login page without depending
+// on monet's unexported service field.
+func (s *UserProfileService) Validate(username, password string) (bool, error) {
+	var hash string
+	if err := s.db.Get(&hash, `SELECT password_hash FROM user WHERE username=?`, username); err != nil {
+		return false, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func NewUserProfileService(dbh db.DB) *UserProfileService {
@@ -66,7 +81,7 @@ func (s *UserProfileService) CreateUser(username, email, password, role, profile
 	})
 }
 
-const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.timezone, p.auto_assign_cards, p.created_at, p.last_login_at
+const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.timezone, p.auto_assign_cards, p.disable_passkey_prompt, p.created_at, p.last_login_at
 	FROM user u JOIN user_profile p ON p.user_id = u.id`
 
 func (s *UserProfileService) GetByUsername(username string) (*User, error) {
@@ -113,12 +128,13 @@ func (s *UserProfileService) SetProfileImageURI(userID int64, uri string) error 
 	return err
 }
 
-func (s *UserProfileService) UpdateSettings(userID int64, avatarURI, timezone string, autoAssignCards bool) error {
+func (s *UserProfileService) UpdateSettings(userID int64, avatarURI, timezone string, autoAssignCards, disablePasskeyPrompt bool) error {
 	_, err := s.db.Exec(
-		`UPDATE user_profile SET profile_image_uri=?, timezone=?, auto_assign_cards=? WHERE user_id=?`,
+		`UPDATE user_profile SET profile_image_uri=?, timezone=?, auto_assign_cards=?, disable_passkey_prompt=? WHERE user_id=?`,
 		avatarURI,
 		timezone,
 		autoAssignCards,
+		disablePasskeyPrompt,
 		userID,
 	)
 	return err

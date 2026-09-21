@@ -16,15 +16,16 @@ const (
 // UserProfile extends monet's base user table (id, username, password_hash)
 // with giverny-specific fields. It is 1:1 with the user table via user_id.
 type UserProfile struct {
-	ID              int64      `db:"id"`
-	UserID          int64      `db:"user_id"`
-	Email           string     `db:"email"`
-	Role            string     `db:"role"`
-	ProfileImageURI string     `db:"profile_image_uri"`
-	Timezone        string     `db:"timezone"`
-	AutoAssignCards bool       `db:"auto_assign_cards"`
-	CreatedAt       time.Time  `db:"created_at"`
-	LastLoginAt     *time.Time `db:"last_login_at"`
+	ID                   int64      `db:"id"`
+	UserID               int64      `db:"user_id"`
+	Email                string     `db:"email"`
+	Role                 string     `db:"role"`
+	ProfileImageURI      string     `db:"profile_image_uri"`
+	Timezone             string     `db:"timezone"`
+	AutoAssignCards      bool       `db:"auto_assign_cards"`
+	DisablePasskeyPrompt bool       `db:"disable_passkey_prompt"`
+	CreatedAt            time.Time  `db:"created_at"`
+	LastLoginAt          *time.Time `db:"last_login_at"`
 }
 
 type Invitation struct {
@@ -63,6 +64,10 @@ var UserProfileMigrations = monarch.Set{
 			Up:   `ALTER TABLE user_profile ADD COLUMN auto_assign_cards BOOLEAN NOT NULL DEFAULT 0;`,
 			Down: `SELECT 1;`,
 		},
+		{
+			Up:   `ALTER TABLE user_profile ADD COLUMN disable_passkey_prompt BOOLEAN NOT NULL DEFAULT 0;`,
+			Down: `SELECT 1;`,
+		},
 	},
 }
 
@@ -80,6 +85,33 @@ var InvitationMigrations = monarch.Set{
 				created_at DATETIME DEFAULT (datetime('now'))
 			);`,
 			Down: `DROP TABLE invitation;`,
+		},
+	},
+}
+
+// WebAuthnMigrations stores passkey credential records. The complete
+// credential is retained as JSON so upgrades to the WebAuthn library do not
+// require a schema migration for every credential field.
+var WebAuthnMigrations = monarch.Set{
+	Name: "webauthn_credential",
+	Migrations: []monarch.Migration{
+		{
+			Up: `CREATE TABLE IF NOT EXISTS webauthn_credential (
+				id INTEGER NOT NULL PRIMARY KEY,
+				user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+				credential_id TEXT NOT NULL UNIQUE,
+				public_key BLOB NOT NULL,
+				attestation_type TEXT NOT NULL DEFAULT '',
+				transports TEXT NOT NULL DEFAULT '',
+				sign_count INTEGER NOT NULL DEFAULT 0,
+				clone_warning BOOLEAN NOT NULL DEFAULT 0,
+				aaguid TEXT NOT NULL DEFAULT '',
+				credential_json TEXT NOT NULL,
+				name TEXT NOT NULL DEFAULT '',
+				created_at DATETIME DEFAULT (datetime('now')),
+				last_used_at DATETIME
+			);`,
+			Down: `DROP TABLE webauthn_credential;`,
 		},
 	},
 }

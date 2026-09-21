@@ -3290,4 +3290,10 @@ $(function() {
                 .catch(function() {});
         });
     }
+
+    // Shared by the mobile card page, which uses the same card-detail DOM
+    // without the desktop modal shell.
+    if (window.CardDetail && window.CardDetail.register) {
+        window.CardDetail.register(applyBoardEvent);
+    }
 });

@@ -293,6 +293,46 @@
         display: block;
         min-height: 1px;
     }
+    .settings-passkeys {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .45rem;
+    }
+    .settings-passkeys .settings-help { margin: 0; }
+    .passkey-list {
+        width: 100%;
+        margin: .25rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .passkey-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+
+    .passkey-prompt {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        background: rgba(0, 0, 0, .4);
+    }
+    .passkey-prompt[hidden] { display: none; }
+    .passkey-prompt-card {
+        width: min(100%, 26rem);
+        padding: 1.5rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, .25);
+    }
+    .passkey-prompt-card h2 { margin-top: 0; }
+    .passkey-prompt-actions { display: flex; justify-content: flex-end; gap: .6rem; }
 
     .settings-upload-modal {
         max-width: 620px;

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	webauthn "github.com/go-webauthn/webauthn/webauthn"
 	gconf "github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/monet/app"
 	mauth "github.com/jmoiron/monet/auth"
@@ -28,20 +29,25 @@ var templates embed.FS
 // App is giverny's auth application. It manages user profiles and invitations,
 // extending monet's base auth app (which owns the user table + login/logout).
 type App struct {
-	db      db.DB
-	baseURL string
-	users   *UserProfileService
-	invites *InviteService
-	fss     vfs.Registry
+	db          db.DB
+	baseURL     string
+	users       *UserProfileService
+	invites     *InviteService
+	fss         vfs.Registry
+	webAuthn    *webauthn.WebAuthn
+	webAuthnErr error
 }
 
 func NewApp(dbh db.DB, baseURL string, fss vfs.Registry) *App {
+	wa, waErr := newWebAuthn(baseURL)
 	return &App{
-		db:      dbh,
-		baseURL: baseURL,
-		users:   NewUserProfileService(dbh),
-		invites: NewInviteService(dbh),
-		fss:     fss,
+		db:          dbh,
+		baseURL:     baseURL,
+		users:       NewUserProfileService(dbh),
+		invites:     NewInviteService(dbh),
+		fss:         fss,
+		webAuthn:    wa,
+		webAuthnErr: waErr,
 	}
 }
 
@@ -52,7 +58,7 @@ func (a *App) Migrate() error {
 	if err != nil {
 		return err
 	}
-	for _, s := range []monarch.Set{UserProfileMigrations, InvitationMigrations} {
+	for _, s := range []monarch.Set{UserProfileMigrations, InvitationMigrations, WebAuthnMigrations} {
 		if err := m.Upgrade(s); err != nil {
 			return fmt.Errorf("%s: %w", s.Name, err)
 		}
@@ -84,6 +90,22 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/", a.handleUserSettings)
 		r.Post("/", a.handleUserSettingsSave)
 		r.Post("/avatar-upload", a.handleAvatarUpload)
+	})
+	r.Route("/mobile/user/settings", func(r chi.Router) {
+		r.Use(RequireAuth)
+		r.Get("/", a.handleMobileUserSettings)
+	})
+
+	r.Route("/auth/webauthn", func(r chi.Router) {
+		r.Post("/login/begin", a.handleWebAuthnLoginBegin)
+		r.Post("/login/finish", a.handleWebAuthnLoginFinish)
+		r.Group(func(r chi.Router) {
+			r.Use(RequireAuth)
+			r.Post("/register/begin", a.handleWebAuthnRegisterBegin)
+			r.Post("/register/finish", a.handleWebAuthnRegisterFinish)
+			r.Get("/credentials", a.handleWebAuthnCredentials)
+			r.Post("/credentials/{id}/delete", a.handleWebAuthnCredentialDelete)
+		})
 	})
 }
 
@@ -310,8 +332,12 @@ func validTimezone(tz string) bool {
 }
 
 func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *User, errMsg string, saved bool) {
+	a.renderUserSettingsWithBase(w, r, "base", user, errMsg, saved)
+}
+
+func (a *App) renderUserSettingsWithBase(w http.ResponseWriter, r *http.Request, base string, user *User, errMsg string, saved bool) {
 	reg := mtr.RegistryFromContext(r.Context())
-	if err := reg.RenderWithBase(w, "base", "auth/settings.html", mtr.Ctx{
+	if err := reg.RenderWithBase(w, base, "auth/settings.html", mtr.Ctx{
 		"title":     "settings",
 		"user":      user,
 		"timezones": settingsTimezones,
@@ -320,6 +346,10 @@ func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *U
 	}); err != nil {
 		app.Http500("rendering settings", w, err)
 	}
+}
+
+func (a *App) handleMobileUserSettings(w http.ResponseWriter, r *http.Request) {
+	a.renderUserSettingsWithBase(w, r, "mobile-base", UserFromContext(r.Context()), "", false)
 }
 
 func (a *App) handleUserSettings(w http.ResponseWriter, r *http.Request) {
@@ -337,6 +367,7 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 	avatarChanged := r.FormValue("profile_image_uri_present") == "1"
 	timezoneChanged := r.FormValue("timezone_present") == "1"
 	autoAssignChanged := r.FormValue("auto_assign_cards_present") == "1"
+	passkeyPromptChanged := r.FormValue("disable_passkey_prompt_present") == "1"
 	avatarURI := user.ProfileImageURI
 	if avatarChanged {
 		avatarURI = strings.TrimSpace(r.FormValue("profile_image_uri"))
@@ -357,6 +388,7 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 		updated.ProfileImageURI = avatarURI
 		updated.Timezone = timezone
 		updated.AutoAssignCards = r.FormValue("auto_assign_cards") != ""
+		updated.DisablePasskeyPrompt = r.FormValue("disable_passkey_prompt") != ""
 		if wantsJSON {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -373,17 +405,22 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if autoAssignChanged {
 		autoAssign = r.FormValue("auto_assign_cards") != ""
 	}
-	if err := a.users.UpdateSettings(user.ID, avatarURI, timezone, autoAssign); err != nil {
+	disablePasskeyPrompt := user.DisablePasskeyPrompt
+	if passkeyPromptChanged {
+		disablePasskeyPrompt = r.FormValue("disable_passkey_prompt") != ""
+	}
+	if err := a.users.UpdateSettings(user.ID, avatarURI, timezone, autoAssign, disablePasskeyPrompt); err != nil {
 		app.Http500("saving user settings", w, err)
 		return
 	}
 	if wantsJSON {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":                true,
-			"profile_image_uri": avatarURI,
-			"timezone":          timezone,
-			"auto_assign_cards": autoAssign,
+			"ok":                     true,
+			"profile_image_uri":      avatarURI,
+			"timezone":               timezone,
+			"auto_assign_cards":      autoAssign,
+			"disable_passkey_prompt": disablePasskeyPrompt,
 		})
 		return
 	}
