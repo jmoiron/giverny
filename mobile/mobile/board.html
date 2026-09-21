@@ -2,12 +2,14 @@
     <div class="mobile-board-heading"><h1>{{.board.Name}}</h1><span class="visibility-badge">{{.board.Visibility}}</span>{{if .notificationsEnabled}}<button type="button" class="board-notification-toggle{{if .boardNotifications}} is-enabled{{end}}" data-board-slug="{{.board.Slug}}" data-enabled="{{if .boardNotifications}}1{{else}}0{{end}}" title="toggle board notifications" aria-label="toggle board notifications"><i class="fa-solid {{if .boardNotifications}}fa-bell{{else}}fa-bell-slash{{end}}"></i></button>{{end}}</div>
     <div class="mobile-board-columns">
         {{range .columns}}
+        <div class="mobile-board-column-page">
         <section class="mobile-board-column" data-column-id="{{.ID}}">
             <h2>{{.Name}}{{if .WIPLimit}} <small>{{.WIPLimit}}</small>{{end}}</h2>
             <div class="col-cards" data-column-id="{{.ID}}">
                 {{range .Cards}}{{.HTML}}{{end}}
             </div>
         </section>
+        </div>
         {{end}}
     </div>
     <div class="mobile-col-pager" aria-label="columns">

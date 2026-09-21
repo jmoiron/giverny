@@ -137,10 +137,11 @@
     .mobile-board-heading { display: flex; align-items: center; gap: .6rem; }
     .mobile-board-heading h1 { margin: 0; }
     .mobile-board-heading span { color: var(--muted); }
-    .mobile-board-columns { display: flex; gap: .8rem; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: .8rem 0 1rem; }
-    .mobile-board-column { position: relative; flex: 0 0 92vw; min-height: 60vh; scroll-snap-align: center; padding: .8rem; background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%); border: 1px solid var(--border); border-radius: 8px; box-shadow: 3px 4px 0px rgba(0,0,0,0.18); }
-    .mobile-board-column::after { content: ""; position: absolute; pointer-events: none; top: 0; right: 0; bottom: 0; width: 1.5rem; background: linear-gradient(to right, transparent, var(--bg)); opacity: .8; }
+    .mobile-board-columns { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: .8rem 0 1rem; }
+    .mobile-board-column-page { position: relative; flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 0 .4rem; }
+    .mobile-board-column { position: relative; width: 100%; min-width: 0; min-height: 60vh; padding: .8rem; background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%); border: 1px solid var(--border); border-radius: 8px; box-shadow: 3px 4px 0px rgba(0,0,0,0.18); }
     .mobile-board-column h2 { margin-top: 0; }
+    .mobile-board-column .col-cards { min-width: 0; }
     .mobile-board-column .kanban-card { margin: .6rem 0; touch-action: pan-x pan-y; }
     .mobile-board-column .kanban-card.dragging-source { opacity: .35; }
     .touch-drag-placeholder { margin: .6rem 0; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }

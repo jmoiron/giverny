@@ -133,7 +133,8 @@
         boardPage.appendChild(edgeRight);
         function setEdges(active) {
             var columns = boardPage.querySelector('.mobile-board-columns');
-            var maxScroll = columns ? Math.max(0, columns.scrollWidth - columns.clientWidth) : 0;
+            var lastColumn = columns && columns.querySelector('.mobile-board-column-page:last-child');
+            var maxScroll = lastColumn ? lastColumn.offsetLeft : 0;
             edgeLeft.classList.toggle('active', !!active && !!columns && columns.scrollLeft > 2);
             edgeRight.classList.toggle('active', !!active && !!columns && columns.scrollLeft < maxScroll - 2);
         }
@@ -191,21 +192,22 @@
         function edgeDirectionFor(current, point) {
             var columns = boardPage.querySelector('.mobile-board-columns');
             if (!columns) return 0;
-            var maxScroll = Math.max(0, columns.scrollWidth - columns.clientWidth);
+            var lastColumn = columns.querySelector('.mobile-board-column-page:last-child');
+            var maxScroll = lastColumn ? lastColumn.offsetLeft : 0;
             if (point.clientX < 72 && columns.scrollLeft > 2) return -1;
             if (point.clientX > window.innerWidth - 72 && columns.scrollLeft < maxScroll - 2) return 1;
             return 0;
         }
         function nextColumnScrollLeft(columns, direction) {
-            var columnNodes = columns.querySelectorAll('.mobile-board-column');
+            var columnNodes = columns.querySelectorAll('.mobile-board-column-page');
             var currentScroll = columns.scrollLeft;
-            var maxScroll = Math.max(0, columns.scrollWidth - columns.clientWidth);
+            var lastColumn = columns.querySelector('.mobile-board-column-page:last-child');
+            var maxScroll = lastColumn ? lastColumn.offsetLeft : 0;
             var columnsRect = columns.getBoundingClientRect();
             function snapLeft(column) {
                 var columnRect = column.getBoundingClientRect();
                 var columnLeft = columnRect.left - columnsRect.left + columns.scrollLeft;
-                return Math.max(0, Math.min(maxScroll,
-                    columnLeft - (columns.clientWidth - columnRect.width) / 2));
+                return Math.max(0, Math.min(maxScroll, columnLeft));
             }
             if (direction > 0) {
                 for (var i = 0; i < columnNodes.length; i++) {
@@ -401,7 +403,7 @@
         var columns = document.querySelector('.mobile-board-columns');
         var dots = document.querySelectorAll('.mobile-col-pager span');
         if (columns && dots.length) columns.addEventListener('scroll', function () {
-            var index = Math.round(columns.scrollLeft / (columns.clientWidth * .928));
+            var index = columns.clientWidth ? Math.round(columns.scrollLeft / columns.clientWidth) : 0;
             dots.forEach(function (dot, i) { dot.classList.toggle('active', i === index); });
         }, {passive: true});
         var close = document.getElementById('card-modal-close');
