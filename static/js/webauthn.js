@@ -99,14 +99,39 @@
 
     var prompt = document.getElementById('passkey-prompt');
     if (prompt && document.body.getAttribute('data-disable-passkey-prompt') !== '1') {
-        fetch('/auth/webauthn/credentials').then(function (response) {
+        fetch('/auth/webauthn/prompt').then(function (response) {
+            if (!response.ok) throw new Error('could not check passkey prompt state');
+            return response.json();
+        }).then(function (state) {
+            if (!state.pending) return null;
+            return fetch('/auth/webauthn/credentials');
+        }).then(function (response) {
+            if (!response) return null;
             if (!response.ok) throw new Error('could not check passkeys');
             return response.json();
         }).then(function (credentials) {
+            if (!credentials) return;
             if (!Array.isArray(credentials) || !credentials.length) prompt.hidden = false;
         }).catch(function () {});
-        document.getElementById('passkey-prompt-dismiss').addEventListener('click', function () {
+        function dismissPrompt() {
             prompt.hidden = true;
+        }
+        document.getElementById('passkey-prompt-dismiss').addEventListener('click', dismissPrompt);
+        document.getElementById('passkey-prompt-never').addEventListener('click', function () {
+            var button = document.getElementById('passkey-prompt-never');
+            button.disabled = true;
+            postJSON('/auth/webauthn/prompt/never').then(dismissPrompt).catch(function (error) {
+                button.disabled = false;
+                var promptStatus = document.getElementById('passkey-prompt-status');
+                promptStatus.textContent = error.message;
+                promptStatus.hidden = false;
+            });
+        });
+        prompt.addEventListener('click', function (event) {
+            if (event.target === prompt) dismissPrompt();
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !prompt.hidden) dismissPrompt();
         });
         document.getElementById('passkey-prompt-create').addEventListener('click', function () {
             var button = document.getElementById('passkey-prompt-create');
@@ -115,7 +140,9 @@
             registerPasskey().then(function () {
                 prompt.hidden = true;
             }).catch(function (error) {
-                promptStatus.textContent = error.message;
+                promptStatus.textContent = error.name === 'NotAllowedError' || error.name === 'AbortError'
+                    ? 'The operation failed or was canceled.'
+                    : error.message;
                 promptStatus.hidden = false;
                 button.disabled = false;
             });

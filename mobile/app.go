@@ -32,10 +32,11 @@ type App struct {
 	monetAuth *mauth.App
 	fss       vfs.Registry
 	push      *PushService
+	version   string
 }
 
-func NewApp(dbh db.DB, cfg *conf.Config, kanbanApp *kanban.App, gauthApp *gauth.App, monetAuth *mauth.App, fss vfs.Registry) *App {
-	return &App{db: dbh, cfg: cfg, kanban: kanbanApp, gauth: gauthApp, monetAuth: monetAuth, fss: fss, push: NewPushService(dbh, cfg, kanbanApp)}
+func NewApp(dbh db.DB, cfg *conf.Config, kanbanApp *kanban.App, gauthApp *gauth.App, monetAuth *mauth.App, fss vfs.Registry, version string) *App {
+	return &App{db: dbh, cfg: cfg, kanban: kanbanApp, gauth: gauthApp, monetAuth: monetAuth, fss: fss, push: NewPushService(dbh, cfg, kanbanApp), version: version}
 }
 
 func (a *App) Name() string { return "mobile" }
@@ -210,6 +211,7 @@ func (a *App) handleCardDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, name string, ctx mtr.Ctx) {
+	ctx["version"] = a.version
 	if err := mtr.RegistryFromContext(r.Context()).RenderWithBase(w, "mobile-base", name, ctx); err != nil {
 		app.Http500("rendering mobile page", w, err)
 	}

@@ -81,7 +81,7 @@
         opacity: 1;
         pointer-events: auto;
     }
-    .mobile-drawer-left { left: 0; width: min(84vw, 280px); transform: translateX(-105%); overflow-y: auto; }
+    .mobile-drawer-left { left: 0; width: min(84vw, 280px); transform: translateX(-105%); overflow-y: auto; display: flex; flex-direction: column; }
     .mobile-drawer-right { right: 0; width: 100vw; transform: translateX(105%); }
     &.mobile-left-open .mobile-drawer-left, &.mobile-right-open .mobile-drawer-right { transform: translateX(0); }
     .mobile-drawer-left .side-nav-inner { padding: .85rem .5rem 1rem; }
@@ -101,6 +101,7 @@
     .mobile-drawer-left .side-nav-boards { padding-left: 1.75rem; }
     .mobile-drawer-left .side-nav-board-link { display: block; padding: .45rem .65rem; border-radius: 4px; color: var(--muted); text-decoration: none; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .mobile-drawer-left .side-nav-board-link:hover { background: var(--hover-bg); color: var(--text); }
+    .mobile-nav-version { margin-top: auto; padding: .75rem 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .75rem; opacity: .7; }
     .mobile-user-card { display: flex; flex-direction: column; gap: .5rem; padding: 2rem; font-size: 1.1rem; }
     .mobile-user-card strong { padding-bottom: .75rem; border-bottom: 1px solid var(--border); }
     .mobile-user-card a, .mobile-user-card button { display: flex; align-items: center; gap: .75rem; text-align: left; padding: .75rem 0; background: none; border: 0; color: var(--link); font: inherit; text-decoration: none; }

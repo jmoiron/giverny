@@ -23,9 +23,22 @@ func AddUserMiddleware(svc *UserProfileService) func(http.Handler) http.Handler 
 					r = r.WithContext(context.WithValue(r.Context(), userKey{}, user))
 					if session.Values["login_recorded"] != true {
 						session.Values["login_recorded"] = true
+						if !user.DisablePasskeyPrompt {
+							session.Values["passkey_prompt_pending"] = true
+						}
 						session.Save(r, w)
 						svc.RecordLogin(user.ID)
 					}
+				}
+			} else {
+				// Logout leaves the session cookie in place. Clear login-only
+				// state so a later login in the same browser session is treated
+				// as a new login and can show the passkey prompt again.
+				session := sm.Session(r)
+				if session.Values["login_recorded"] != nil || session.Values["passkey_prompt_pending"] != nil {
+					delete(session.Values, "login_recorded")
+					delete(session.Values, "passkey_prompt_pending")
+					_ = session.Save(r, w)
 				}
 			}
 			next.ServeHTTP(w, r)

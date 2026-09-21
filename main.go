@@ -36,9 +36,20 @@ import (
 
 const (
 	cfgEnvVar           = "GIVERNY_CONFIG_PATH"
-	givernyVersion      = "0.0.1"
 	preferredViewCookie = "giverny-preferred-view"
 )
+
+type Version struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+func (v Version) String() string {
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+}
+
+var givernyVersion = Version{1, 0, 0}
 
 //go:embed static
 var static embed.FS
@@ -104,7 +115,7 @@ func main() {
 
 	if opts.Version {
 		v, _, t := sqlite3.Version()
-		fmt.Printf("Giverny v%s\n", givernyVersion)
+		fmt.Printf("Giverny v%s\n", givernyVersion.String())
 		fmt.Printf("Built w/ SQLite %v (%s)\n", v, strings.Split(t, " ")[0])
 		return
 	}
@@ -170,7 +181,7 @@ func main() {
 	smtpApp := die(gsmtp.NewApp(dbh, cfg.Secret))("initializing smtp app")
 
 	kanbanApp := kanban.NewApp(dbh, fss)
-	mobileApp := mobile.NewApp(dbh, cfg, kanbanApp, gauthApp, authApp, fss)
+	mobileApp := mobile.NewApp(dbh, cfg, kanbanApp, gauthApp, authApp, fss, givernyVersion.String())
 	kanbanApp.SetPushNotifier(mobileApp.PushNotifier())
 
 	// apps is the ordered list of sub-applications. Auth must come first

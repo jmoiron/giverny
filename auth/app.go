@@ -103,6 +103,8 @@ func (a *App) Bind(r chi.Router) {
 			r.Use(RequireAuth)
 			r.Post("/register/begin", a.handleWebAuthnRegisterBegin)
 			r.Post("/register/finish", a.handleWebAuthnRegisterFinish)
+			r.Get("/prompt", a.handleWebAuthnPrompt)
+			r.Post("/prompt/never", a.handleWebAuthnPromptNever)
 			r.Get("/credentials", a.handleWebAuthnCredentials)
 			r.Post("/credentials/{id}/delete", a.handleWebAuthnCredentialDelete)
 		})

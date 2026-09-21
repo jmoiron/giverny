@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	webauthn "github.com/go-webauthn/webauthn/webauthn"
@@ -17,6 +19,39 @@ const (
 	webAuthnRegistrationSession = "giverny_webauthn_registration"
 	webAuthnLoginSession        = "giverny_webauthn_login"
 )
+
+func defaultWebAuthnCredentialName(r *http.Request) string {
+	ua := r.UserAgent()
+	browser := "Browser"
+	switch {
+	case strings.Contains(ua, "Edg/"):
+		browser = "Edge"
+	case strings.Contains(ua, "OPR/"):
+		browser = "Opera"
+	case strings.Contains(ua, "Firefox/"):
+		browser = "Firefox"
+	case strings.Contains(ua, "Chrome/"):
+		browser = "Chrome"
+	case strings.Contains(ua, "Safari/"):
+		browser = "Safari"
+	}
+
+	os := "Unknown device"
+	switch {
+	case strings.Contains(ua, "Android"):
+		os = "Android"
+	case strings.Contains(ua, "iPhone"), strings.Contains(ua, "iPad"), strings.Contains(ua, "iPod"):
+		os = "iOS"
+	case strings.Contains(ua, "Windows NT"):
+		os = "Windows"
+	case strings.Contains(ua, "Mac OS X"):
+		os = "macOS"
+	case strings.Contains(ua, "Linux"):
+		os = "Linux"
+	}
+
+	return fmt.Sprintf("%s on %s — %s", browser, os, time.Now().Format("2006-01-02"))
+}
 
 func (a *App) webAuthnReady(w http.ResponseWriter) bool {
 	if a.webAuthnErr != nil {
@@ -99,7 +134,7 @@ func (a *App) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "passkey registration failed", http.StatusBadRequest)
 		return
 	}
-	if err := a.users.createWebAuthnCredential(user.ID, credential, ""); err != nil {
+	if err := a.users.createWebAuthnCredential(user.ID, credential, defaultWebAuthnCredentialName(r)); err != nil {
 		app.Http500("saving passkey", w, err)
 		return
 	}
@@ -113,6 +148,26 @@ func (a *App) handleWebAuthnCredentials(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, rows)
+}
+
+func (a *App) handleWebAuthnPrompt(w http.ResponseWriter, r *http.Request) {
+	session := mauth.SessionFromContext(r.Context()).Session(r)
+	pending := session.Values["passkey_prompt_pending"] == true
+	delete(session.Values, "passkey_prompt_pending")
+	if err := session.Save(r, w); err != nil {
+		app.Http500("saving passkey prompt state", w, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"pending": pending})
+}
+
+func (a *App) handleWebAuthnPromptNever(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	if err := a.users.UpdateSettings(user.ID, user.ProfileImageURI, user.Timezone, user.AutoAssignCards, true); err != nil {
+		app.Http500("saving passkey prompt preference", w, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (a *App) handleWebAuthnCredentialDelete(w http.ResponseWriter, r *http.Request) {
