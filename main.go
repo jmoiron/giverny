@@ -49,7 +49,7 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
-var givernyVersion = Version{1, 0, 3}
+var givernyVersion = Version{1, 0, 4}
 
 //go:embed static
 var static embed.FS
