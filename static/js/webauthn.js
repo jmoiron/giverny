@@ -78,7 +78,7 @@
                 list.innerHTML = '';
                 credentials.forEach(function (credential) {
                     var item = document.createElement('li');
-                    item.appendChild(document.createTextNode('passkey'));
+                    item.appendChild(document.createTextNode(credential.name || 'passkey'));
                     var remove = document.createElement('button');
                     remove.type = 'button'; remove.textContent = 'remove';
                     remove.addEventListener('click', function () {
