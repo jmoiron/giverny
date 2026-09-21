@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-webauthn/webauthn/protocol"
 	webauthn "github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jmoiron/monet/app"
 	mauth "github.com/jmoiron/monet/auth"
@@ -103,7 +104,9 @@ func (a *App) handleWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Request
 		app.Http500("loading passkeys", w, err)
 		return
 	}
-	creation, session, err := a.webAuthn.BeginRegistration(waUser)
+	creation, session, err := a.webAuthn.BeginRegistration(waUser,
+		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
+	)
 	if err != nil {
 		app.Http500("starting passkey registration", w, err)
 		return
