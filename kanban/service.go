@@ -1025,6 +1025,17 @@ func (s *CardService) NotificationRecipients(cardID int64) ([]int64, error) {
 	return ids, err
 }
 
+// NotificationOwners returns the card creator and assignees without duplicates.
+func (s *CardService) NotificationOwners(cardID int64) ([]int64, error) {
+	var ids []int64
+	err := s.db.Select(&ids, `
+		SELECT created_by FROM card WHERE id=?
+		UNION
+		SELECT user_id FROM card_assignee WHERE card_id=?
+		ORDER BY created_by`, cardID, cardID)
+	return ids, err
+}
+
 func (s *CardService) RecordSubscriptionMessage(cardID int64, message string) error {
 	message = strings.TrimSpace(message)
 	if message == "" {

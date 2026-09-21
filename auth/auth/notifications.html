@@ -1,0 +1,16 @@
+<div class="page-wrap notifications-page">
+    <h2>notifications</h2>
+    {{if .notifications}}
+    <div class="notifications-list">
+        {{range .notifications}}
+        <a class="notification-item" href="{{.URL}}">
+            <span class="notification-item-icon"><i class="fa-solid fa-bell"></i></span>
+            <span class="notification-item-body">
+                <strong>{{.Message}}</strong>
+                <small>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</small>
+            </span>
+        </a>
+        {{end}}
+    </div>
+    {{else}}<p class="empty-state">no notifications yet</p>{{end}}
+</div>

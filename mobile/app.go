@@ -56,6 +56,7 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("mobile/cards.html", templates)
 	reg.AddPathFS("mobile/board.html", templates)
 	reg.AddPathFS("mobile/card.html", templates)
+	reg.AddPathFS("mobile/notifications.html", templates)
 }
 
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
@@ -70,6 +71,7 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/cards/my-tasks/", a.handleMyTasks)
 		r.Get("/cards/subscribed/", a.handleSubscribedCards)
 		r.Get("/cards/in-progress/", a.handleInProgressCards)
+		r.Get("/notifications/", a.handleNotifications)
 		r.Get("/boards/{slug}/", a.handleBoardDetail)
 		r.Get("/boards/{slug}/columns/{colID}/cards", a.handleColumnCardsPartial)
 		r.Get("/boards/{slug}/cards/{cardID}/", a.handleCardDetail)
@@ -132,7 +134,20 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		app.Http500("loading mobile boards", w, err)
 		return
 	}
-	a.render(w, r, "mobile/home.html", mtr.Ctx{"title": "boards", "user": user, "boards": boards})
+	notificationSettings, err := a.gauth.Users().GetNotificationSettings(user.ID)
+	if err != nil {
+		app.Http500("loading notification settings", w, err)
+		return
+	}
+	boardNotifications := make(map[int64]bool, len(boards))
+	for _, board := range boards {
+		boardNotifications[board.ID], err = a.gauth.Users().BoardNotificationsEnabled(user.ID, board.ID)
+		if err != nil {
+			app.Http500("loading board notification settings", w, err)
+			return
+		}
+	}
+	a.render(w, r, "mobile/home.html", mtr.Ctx{"title": "boards", "user": user, "boards": boards, "notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled, "boardNotifications": boardNotifications})
 }
 
 func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +167,17 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("rendering mobile board", w, err)
 		return
 	}
-	a.render(w, r, "mobile/board.html", mtr.Ctx{"title": board.Name, "user": user, "board": board, "columns": columns, "canEdit": canEdit})
+	notificationSettings, err := a.gauth.Users().GetNotificationSettings(user.ID)
+	if err != nil {
+		app.Http500("loading notification settings", w, err)
+		return
+	}
+	boardNotifications, err := a.gauth.Users().BoardNotificationsEnabled(user.ID, board.ID)
+	if err != nil {
+		app.Http500("loading board notification settings", w, err)
+		return
+	}
+	a.render(w, r, "mobile/board.html", mtr.Ctx{"title": board.Name, "user": user, "board": board, "columns": columns, "canEdit": canEdit, "notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled, "boardNotifications": boardNotifications})
 }
 
 func (a *App) handleColumnCardsPartial(w http.ResponseWriter, r *http.Request) {

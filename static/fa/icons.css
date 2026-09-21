@@ -93,6 +93,9 @@
 .fa-bell {
   --fa: "\f0f3";
 }
+.fa-bell-slash {
+  --fa: "\f1f6";
+}
 .fa-bookmark {
   --fa: "\f02e";
 }

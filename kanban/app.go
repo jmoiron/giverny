@@ -54,7 +54,8 @@ type App struct {
 // PushNotifier receives mutation notifications without coupling kanban to a
 // particular delivery mechanism.
 type PushNotifier interface {
-	NotifyCardAssigned(cardID, assigneeID int64)
+	NotifyCardAssigned(cardID, assigneeID, actorID int64)
+	NotifyCardEvent(cardID, actorID int64, action string)
 	NotifyNewComment(cardID, actorID int64)
 }
 
@@ -331,6 +332,7 @@ func (a *App) Bind(r chi.Router) {
 
 		r.Route("/{slug}", func(r chi.Router) {
 			r.Get("/", a.handleBoardDetail)
+			r.Post("/notifications", a.handleBoardNotifications)
 			r.Get("/ws", a.handleWS)
 
 			r.Group(func(r chi.Router) {
@@ -1218,15 +1220,45 @@ func (a *App) handleBoardList(w http.ResponseWriter, r *http.Request) {
 		app.Http500("listing boards", w, err)
 		return
 	}
+	notificationSettings, err := a.users.GetNotificationSettings(user.ID)
+	if err != nil {
+		app.Http500("loading notification settings", w, err)
+		return
+	}
+	boardNotifications := make(map[int64]bool, len(boards))
+	for _, board := range boards {
+		boardNotifications[board.ID], err = a.users.BoardNotificationsEnabled(user.ID, board.ID)
+		if err != nil {
+			app.Http500("loading board notification settings", w, err)
+			return
+		}
+	}
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board_list.html", mtr.Ctx{
 		"title":   "boards",
 		"boards":  boards,
 		"user":    user,
 		"isAdmin": user.IsAdmin(),
+		"notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled,
+		"boardNotifications": boardNotifications,
 	}); err != nil {
 		app.Http500("rendering board list", w, err)
 	}
+}
+
+func (a *App) handleBoardNotifications(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	board, err := a.boards.GetBySlug(chi.URLParam(r, "slug"))
+	if err != nil || !a.CanViewBoard(board, user) {
+		http.NotFound(w, r)
+		return
+	}
+	enabled := r.FormValue("enabled") == "1"
+	if err := a.users.SetBoardNotifications(user.ID, board.ID, enabled); err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not save board notifications")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
 }
 
 func (a *App) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
@@ -1366,6 +1398,16 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	canEdit := canModifyBoard(board, user)
+	notificationSettings, err := a.users.GetNotificationSettings(user.ID)
+	if err != nil {
+		app.Http500("loading notification settings", w, err)
+		return
+	}
+	boardNotifications, err := a.users.BoardNotificationsEnabled(user.ID, board.ID)
+	if err != nil {
+		app.Http500("loading board notification settings", w, err)
+		return
+	}
 	columnsWithCards, err := a.buildRenderedColumns(r, cols, cards, canEdit)
 	if err != nil {
 		app.Http500("rendering board cards", w, err)
@@ -1393,6 +1435,8 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		"canEdit":        canEdit,
 		"cardModalShell": cardModalShell,
 		"mainClass":      "board-main",
+		"notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled,
+		"boardNotifications": boardNotifications,
 	}); err != nil {
 		app.Http500("rendering board", w, err)
 	}
@@ -1594,6 +1638,9 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		ColumnID: colID,
 		HTML:     html,
 	})
+	if a.pushNotifier != nil {
+		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "new_card")
+	}
 	w.Header().Set("Content-Type", "text/html")
 	if _, err := io.WriteString(w, html); err != nil {
 		slog.Error("writing card snippet response", "err", err)
@@ -1931,6 +1978,11 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 		})
 		_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" updated the card description")
 	}
+	if prevCard.Title != card.Title || prevCard.Content != card.Content {
+		if a.pushNotifier != nil {
+			go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_updated")
+		}
+	}
 	resp := a.cardResponse(r, card)
 	resp["html"] = buf.String()
 	writeJSON(w, http.StatusOK, resp)
@@ -1974,6 +2026,9 @@ func (a *App) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.cardResponse(r, card))
 	}
 	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" marked the card done")
+	if prevCard.ColumnID != card.ColumnID && a.pushNotifier != nil {
+		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_closed")
+	}
 }
 
 func (a *App) handleToggleSubscription(w http.ResponseWriter, r *http.Request) {
@@ -2061,7 +2116,7 @@ func (a *App) handleSetCardAssignee(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" changed the card assignee")
 	if a.pushNotifier != nil {
-		go a.pushNotifier.NotifyCardAssigned(card.ID, assigneeID)
+		go a.pushNotifier.NotifyCardAssigned(card.ID, assigneeID, user.ID)
 	}
 	writeJSON(w, http.StatusOK, a.cardResponse(r, card))
 }
@@ -2522,6 +2577,9 @@ func (a *App) handleArchiveCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" archived the card")
+	if a.pushNotifier != nil {
+		go a.pushNotifier.NotifyCardEvent(cardID, user.ID, "card_closed")
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

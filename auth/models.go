@@ -115,3 +115,39 @@ var WebAuthnMigrations = monarch.Set{
 		},
 	},
 }
+
+var NotificationMigrations = monarch.Set{
+	Name: "notification",
+	Migrations: []monarch.Migration{{
+		Up: `CREATE TABLE IF NOT EXISTS notification_setting (
+			user_id INTEGER NOT NULL PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+			delivery_mode TEXT NOT NULL DEFAULT 'push',
+			new_card BOOLEAN NOT NULL DEFAULT 1,
+			card_closed BOOLEAN NOT NULL DEFAULT 1,
+			card_updated BOOLEAN NOT NULL DEFAULT 1,
+			card_assigned BOOLEAN NOT NULL DEFAULT 1
+		);
+		INSERT OR IGNORE INTO notification_setting (user_id)
+			SELECT id FROM user;`,
+		Down: `DROP TABLE notification_setting;`,
+	}, {
+		Up: `CREATE TABLE IF NOT EXISTS notification_board_mute (
+			user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+			board_id INTEGER NOT NULL REFERENCES board(id) ON DELETE CASCADE,
+			PRIMARY KEY (user_id, board_id)
+		);`,
+		Down: `DROP TABLE notification_board_mute;`,
+	}, {
+		Up: `CREATE TABLE IF NOT EXISTS user_notification (
+			id INTEGER NOT NULL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+			message TEXT NOT NULL,
+			url TEXT NOT NULL,
+			created_at DATETIME DEFAULT (datetime('now'))
+		);`,
+		Down: `DROP TABLE user_notification;`,
+	}, {
+		Up: `ALTER TABLE notification_setting ADD COLUMN card_comment BOOLEAN NOT NULL DEFAULT 1;`,
+		Down: `SELECT 1;`,
+	}},
+}

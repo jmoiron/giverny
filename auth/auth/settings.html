@@ -13,7 +13,7 @@
                 <span class="settings-avatar avatar-fallback" id="settings-avatar-preview"></span>
                 {{end}}
                 <div class="settings-profile-meta">
-                    <div class="settings-email">{{.user.Email}}</div>
+                    {{if .mobile}}<div class="settings-username">{{.user.Username}}</div>{{else}}<div class="settings-email">{{.user.Email}}</div>{{end}}
                 </div>
             </div>
         </div>
@@ -67,6 +67,24 @@
                 <p class="settings-flash" id="passkey-status" hidden></p>
                 <p class="settings-help" id="passkey-unsupported" hidden>Passkeys require a secure connection, such as HTTPS or localhost.</p>
                 <ul class="passkey-list" id="passkey-list"></ul>
+            </div>
+        </div>
+        <div class="notification-settings" id="notification-settings">
+            <label for="notification-delivery-mode">notifications</label>
+            <div class="notification-settings-controls">
+                <select id="notification-delivery-mode" name="notification_delivery_mode">
+                    <option value="push"{{if eq .notifications.DeliveryMode "push"}} selected{{end}}>push notifications</option>
+                    <option value="email_digest"{{if eq .notifications.DeliveryMode "email_digest"}} selected{{end}}>email digest</option>
+                    <option value="push_and_digest"{{if eq .notifications.DeliveryMode "push_and_digest"}} selected{{end}}>push + digest</option>
+                    <option value="disabled"{{if eq .notifications.DeliveryMode "disabled"}} selected{{end}}>disabled</option>
+                </select>
+                <div class="notification-actions"{{if eq .notifications.DeliveryMode "disabled"}} hidden{{end}}>
+                    <label class="settings-checkbox"><input type="checkbox" id="notification-new-card"{{if .notifications.NewCard}} checked{{end}}><span>new card</span></label>
+                    <label class="settings-checkbox"><input type="checkbox" id="notification-card-closed"{{if .notifications.CardClosed}} checked{{end}}><span>card closed</span></label>
+                    <label class="settings-checkbox"><input type="checkbox" id="notification-card-updated"{{if .notifications.CardUpdated}} checked{{end}}><span>card updated</span></label>
+                    <label class="settings-checkbox"><input type="checkbox" id="notification-card-assigned"{{if .notifications.CardAssigned}} checked{{end}}><span>card assigned to me</span></label>
+                    <label class="settings-checkbox"><input type="checkbox" id="notification-card-comment"{{if .notifications.CardComment}} checked{{end}}><span>new comment</span></label>
+                </div>
             </div>
         </div>
     </form>

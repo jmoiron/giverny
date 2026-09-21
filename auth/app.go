@@ -58,7 +58,7 @@ func (a *App) Migrate() error {
 	if err != nil {
 		return err
 	}
-	for _, s := range []monarch.Set{UserProfileMigrations, InvitationMigrations, WebAuthnMigrations} {
+	for _, s := range []monarch.Set{UserProfileMigrations, InvitationMigrations, WebAuthnMigrations, NotificationMigrations} {
 		if err := m.Upgrade(s); err != nil {
 			return fmt.Errorf("%s: %w", s.Name, err)
 		}
@@ -71,6 +71,7 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("auth/invite.html", templates)
 	reg.AddPathFS("auth/users.html", templates)
 	reg.AddPathFS("auth/settings.html", templates)
+	reg.AddPathFS("auth/notifications.html", templates)
 }
 
 func (a *App) Bind(r chi.Router) {
@@ -90,6 +91,19 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/", a.handleUserSettings)
 		r.Post("/", a.handleUserSettingsSave)
 		r.Post("/avatar-upload", a.handleAvatarUpload)
+	})
+	r.Route("/notifications", func(r chi.Router) {
+		r.Use(RequireAuth)
+		r.Get("/", a.handleNotifications)
+	})
+	r.Get("/auth/notifications/enabled", func(w http.ResponseWriter, r *http.Request) {
+		user := UserFromContext(r.Context())
+		settings, err := a.users.GetNotificationSettings(user.ID)
+		if err != nil {
+			app.Http500("loading notification settings", w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"enabled": settings.DeliveryMode != NotificationDisabled})
 	})
 	r.Route("/mobile/user/settings", func(r chi.Router) {
 		r.Use(RequireAuth)
@@ -339,9 +353,16 @@ func (a *App) renderUserSettings(w http.ResponseWriter, r *http.Request, user *U
 
 func (a *App) renderUserSettingsWithBase(w http.ResponseWriter, r *http.Request, base string, user *User, errMsg string, saved bool) {
 	reg := mtr.RegistryFromContext(r.Context())
+	notifications, err := a.users.GetNotificationSettings(user.ID)
+	if err != nil {
+		app.Http500("loading notification settings", w, err)
+		return
+	}
 	if err := reg.RenderWithBase(w, base, "auth/settings.html", mtr.Ctx{
 		"title":     "settings",
 		"user":      user,
+		"mobile":    base == "mobile-base",
+		"notifications": notifications,
 		"timezones": settingsTimezones,
 		"saved":     saved,
 		"error":     errMsg,
@@ -370,6 +391,7 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 	timezoneChanged := r.FormValue("timezone_present") == "1"
 	autoAssignChanged := r.FormValue("auto_assign_cards_present") == "1"
 	passkeyPromptChanged := r.FormValue("disable_passkey_prompt_present") == "1"
+	notificationsChanged := r.FormValue("notification_settings_present") == "1"
 	avatarURI := user.ProfileImageURI
 	if avatarChanged {
 		avatarURI = strings.TrimSpace(r.FormValue("profile_image_uri"))
@@ -415,6 +437,19 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 		app.Http500("saving user settings", w, err)
 		return
 	}
+	if notificationsChanged {
+		if err := a.users.UpdateNotificationSettings(user.ID, NotificationSettings{
+			DeliveryMode:  r.FormValue("notification_delivery_mode"),
+			NewCard:      r.FormValue("notification_new_card") != "",
+			CardClosed:   r.FormValue("notification_card_closed") != "",
+			CardUpdated:  r.FormValue("notification_card_updated") != "",
+			CardAssigned: r.FormValue("notification_card_assigned") != "",
+			CardComment:  r.FormValue("notification_card_comment") != "",
+		}); err != nil {
+			app.Http500("saving notification settings", w, err)
+			return
+		}
+	}
 	if wantsJSON {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -423,6 +458,7 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 			"timezone":               timezone,
 			"auto_assign_cards":      autoAssign,
 			"disable_passkey_prompt": disablePasskeyPrompt,
+			"notification_delivery_mode": r.FormValue("notification_delivery_mode"),
 		})
 		return
 	}

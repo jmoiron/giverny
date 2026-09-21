@@ -300,6 +300,16 @@
         gap: .45rem;
     }
     .settings-passkeys .settings-help { margin: 0; }
+    .notification-settings-controls { display: flex; flex-direction: column; gap: .6rem; }
+    .notification-actions { display: grid; gap: .35rem; }
+    .notification-actions[hidden] { display: none; }
+
+    .notifications-list { display: grid; gap: .65rem; max-width: 42rem; }
+    .notification-item { display: flex; align-items: center; gap: .75rem; padding: .8rem; color: var(--text); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; .card-shadow(); }
+    .notification-item:hover { background: var(--hover-bg); }
+    .notification-item-icon { color: var(--accent); }
+    .notification-item-body { display: flex; flex-direction: column; gap: .2rem; }
+    .notification-item-body small { color: var(--muted); }
     .passkey-list {
         width: 100%;
         margin: .25rem 0 0;

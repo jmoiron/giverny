@@ -15,6 +15,7 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/giverny/conf"
 	"github.com/jmoiron/giverny/kanban"
 	"github.com/jmoiron/monet/db"
@@ -167,25 +168,58 @@ func NewPushService(dbh db.DB, cfg *conf.Config, kanbanApp *kanban.App) *PushSer
 	return &PushService{db: dbh, cfg: cfg, kanban: kanbanApp, subs: &pushSubscriptionService{db: dbh}, vapid: &vapidService{db: dbh, secret: cfg.Secret}}
 }
 
-func (p *PushService) NotifyCardAssigned(cardID, assigneeID int64) {
-	p.notify([]int64{assigneeID}, cardID, "card assigned to you")
+func (p *PushService) NotifyCardAssigned(cardID, assigneeID, actorID int64) {
+	if assigneeID == actorID {
+		return
+	}
+	p.notifyRecipients([]int64{assigneeID}, cardID, actorID, gauth.NotificationCardAssigned, "card assigned to you")
 }
 
-func (p *PushService) NotifyNewComment(cardID, actorID int64) {
+func (p *PushService) NotifyCardEvent(cardID, actorID int64, action string) {
 	recipients, err := p.kanban.Cards().NotificationRecipients(cardID)
 	if err != nil {
 		return
 	}
+	p.notifyRecipients(recipients, cardID, actorID, action, notificationMessage(action))
+}
+
+func (p *PushService) NotifyNewComment(cardID, actorID int64) {
+	recipients, err := p.kanban.Cards().NotificationOwners(cardID)
+	if err != nil {
+		return
+	}
+	card, err := p.kanban.Cards().Get(cardID)
+	if err != nil {
+		return
+	}
+	recipients = append(recipients, card.CreatedBy)
+	seen := make(map[int64]bool, len(recipients))
 	filtered := recipients[:0]
 	for _, id := range recipients {
-		if id != actorID {
+		if id != actorID && !seen[id] {
+			seen[id] = true
 			filtered = append(filtered, id)
 		}
 	}
-	p.notify(filtered, cardID, "new comment on a card you follow")
+	p.notifyRecipients(filtered, cardID, actorID, gauth.NotificationCardComment, "new comment on a card you follow")
 }
 
-func (p *PushService) notify(userIDs []int64, cardID int64, message string) {
+func notificationMessage(action string) string {
+	switch action {
+	case gauth.NotificationNewCard:
+		return "new card"
+	case gauth.NotificationCardClosed:
+		return "card closed"
+	case gauth.NotificationCardUpdated:
+		return "card updated"
+	case gauth.NotificationCardComment:
+		return "new comment"
+	default:
+		return "card activity"
+	}
+}
+
+func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, action, message string) {
 	card, err := p.kanban.Cards().Get(cardID)
 	if err != nil {
 		return
@@ -194,11 +228,38 @@ func (p *PushService) notify(userIDs []int64, cardID int64, message string) {
 	if err != nil {
 		return
 	}
+	users := gauth.NewUserProfileService(p.db)
+	pushRecipients := make([]int64, 0, len(userIDs))
+	notificationURL := "/mobile/boards/" + board.Slug + "/cards/" + fmt.Sprint(card.ID) + "/"
+	for _, userID := range userIDs {
+		if userID == actorID {
+			continue
+		}
+		settings, err := users.GetNotificationSettings(userID)
+		if err != nil || settings.DeliveryMode == gauth.NotificationDisabled {
+			continue
+		}
+		if action != "" && !notificationActionEnabled(settings, action) {
+			continue
+		}
+		enabled, err := users.BoardNotificationsEnabled(userID, board.ID)
+		if err != nil || !enabled {
+			continue
+		}
+		if settings.DeliveryMode == gauth.NotificationPush || settings.DeliveryMode == gauth.NotificationPushEmail {
+			pushRecipients = append(pushRecipients, userID)
+		}
+		_ = users.CreateNotification(userID, message+": "+card.Title, notificationURL)
+	}
+	if len(pushRecipients) == 0 {
+		return
+	}
+	userIDs = pushRecipients
 	publicKey, privateKey, err := p.vapid.Ensure()
 	if err != nil {
 		return
 	}
-	payload, _ := json.Marshal(map[string]string{"title": "Giverny", "body": message + ": " + card.Title, "url": "/mobile/boards/" + board.Slug + "/cards/" + fmt.Sprint(card.ID) + "/"})
+	payload, _ := json.Marshal(map[string]string{"title": "Giverny", "body": message + ": " + card.Title, "url": notificationURL})
 	for _, userID := range userIDs {
 		subscriptions, err := p.subs.ListByUser(userID)
 		if err != nil {
@@ -210,6 +271,23 @@ func (p *PushService) notify(userIDs []int64, cardID int64, message string) {
 				_, _ = p.db.Exec(`UPDATE push_subscription SET last_used_at=datetime('now') WHERE id=?`, stored.ID)
 			}
 		}
+	}
+}
+
+func notificationActionEnabled(settings gauth.NotificationSettings, action string) bool {
+	switch action {
+	case gauth.NotificationNewCard:
+		return settings.NewCard
+	case gauth.NotificationCardClosed:
+		return settings.CardClosed
+	case gauth.NotificationCardUpdated:
+		return settings.CardUpdated
+	case gauth.NotificationCardAssigned:
+		return settings.CardAssigned
+	case gauth.NotificationCardComment:
+		return settings.CardComment
+	default:
+		return true
 	}
 }
 

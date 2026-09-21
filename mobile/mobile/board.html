@@ -1,5 +1,5 @@
 <main class="mobile-page mobile-board-page" data-board-slug="{{.board.Slug}}">
-    <div class="mobile-board-heading"><h1>{{.board.Name}}</h1><span class="visibility-badge">{{.board.Visibility}}</span></div>
+    <div class="mobile-board-heading"><h1>{{.board.Name}}</h1><span class="visibility-badge">{{.board.Visibility}}</span>{{if .notificationsEnabled}}<button type="button" class="board-notification-toggle{{if .boardNotifications}} is-enabled{{end}}" data-board-slug="{{.board.Slug}}" data-enabled="{{if .boardNotifications}}1{{else}}0{{end}}" title="toggle board notifications" aria-label="toggle board notifications"><i class="fa-solid {{if .boardNotifications}}fa-bell{{else}}fa-bell-slash{{end}}"></i></button>{{end}}</div>
     <div class="mobile-board-columns">
         {{range .columns}}
         <section class="mobile-board-column" data-column-id="{{.ID}}">

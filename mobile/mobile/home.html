@@ -3,10 +3,13 @@
     {{if .boards}}
     <div class="mobile-home-boards">
         {{range .boards}}
-        <a class="mobile-home-board" href="/mobile/boards/{{.Slug}}/">
-            <strong>{{.Name}}</strong>
-            {{if .Description}}<span>{{.Description}}</span>{{end}}
-        </a>
+        <div class="mobile-home-board-row">
+            <a class="mobile-home-board" href="/mobile/boards/{{.Slug}}/">
+                <strong>{{.Name}}</strong>
+                {{if .Description}}<span>{{.Description}}</span>{{end}}
+            </a>
+            {{if $.notificationsEnabled}}<button type="button" class="board-notification-toggle{{if index $.boardNotifications .ID}} is-enabled{{end}}" data-board-slug="{{.Slug}}" data-enabled="{{if index $.boardNotifications .ID}}1{{else}}0{{end}}" title="toggle board notifications" aria-label="toggle board notifications"><i class="fa-solid {{if index $.boardNotifications .ID}}fa-bell{{else}}fa-bell-slash{{end}}"></i></button>{{end}}
+        </div>
         {{end}}
     </div>
     {{else}}<p class="empty-state">no boards with cards yet</p>{{end}}

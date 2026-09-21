@@ -1,0 +1,16 @@
+<main class="mobile-page mobile-notifications-page">
+    <div class="mobile-list-heading">
+        <h1>notifications</h1>
+        <span>{{len .notifications}}</span>
+    </div>
+    {{if .notifications}}
+    <div class="mobile-notifications-list">
+        {{range .notifications}}
+        <a class="mobile-notification-item" href="{{.URL}}">
+            <i class="fa-solid fa-bell"></i>
+            <span><strong>{{.Message}}</strong><small>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</small></span>
+        </a>
+        {{end}}
+    </div>
+    {{else}}<p class="empty-state">no notifications yet</p>{{end}}
+</main>
