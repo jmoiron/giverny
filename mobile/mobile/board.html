@@ -1,5 +1,5 @@
 <main class="mobile-page mobile-board-page" data-board-slug="{{.board.Slug}}">
-    <div class="mobile-board-heading"><h1>{{.board.Name}}</h1><span>{{.board.Visibility}}</span></div>
+    <div class="mobile-board-heading"><h1>{{.board.Name}}</h1><span class="visibility-badge">{{.board.Visibility}}</span></div>
     <div class="mobile-board-columns">
         {{range .columns}}
         <section class="mobile-board-column" data-column-id="{{.ID}}">

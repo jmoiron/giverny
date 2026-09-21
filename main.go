@@ -49,7 +49,7 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
-var givernyVersion = Version{1, 0, 0}
+var givernyVersion = Version{1, 0, 1}
 
 //go:embed static
 var static embed.FS
@@ -189,6 +189,7 @@ func main() {
 	apps := []app.App{authApp, gauthApp, smtpApp, kanbanApp, mobileApp}
 
 	reg := mtr.NewRegistry()
+	reg.DefaultCtx["version"] = givernyVersion.String()
 	reg.AddBaseFS("base", "templates/base.html", templates)
 	reg.AddBaseFS("mobile-base", "templates/mobile_base.html", templates)
 	reg.AddPathFS("templates/index.html", templates)

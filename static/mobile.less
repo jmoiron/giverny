@@ -101,7 +101,8 @@
     .mobile-drawer-left .side-nav-boards { padding-left: 1.75rem; }
     .mobile-drawer-left .side-nav-board-link { display: block; padding: .45rem .65rem; border-radius: 4px; color: var(--muted); text-decoration: none; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .mobile-drawer-left .side-nav-board-link:hover { background: var(--hover-bg); color: var(--text); }
-    .mobile-nav-version { margin-top: auto; padding: .75rem 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .75rem; opacity: .7; }
+    .mobile-nav-version { display: none; position: fixed; left: 1.25rem; bottom: .75rem; margin: 0; padding: .75rem 0; border: 0; color: var(--muted); font-size: .75rem; opacity: .7; pointer-events: none; }
+    &.mobile-left-open .mobile-nav-version { display: block; }
     .mobile-user-card { display: flex; flex-direction: column; gap: .5rem; padding: 2rem; font-size: 1.1rem; }
     .mobile-user-card strong { padding-bottom: .75rem; border-bottom: 1px solid var(--border); }
     .mobile-user-card a, .mobile-user-card button { display: flex; align-items: center; gap: .75rem; text-align: left; padding: .75rem 0; background: none; border: 0; color: var(--link); font: inherit; text-decoration: none; }
@@ -116,7 +117,7 @@
     .mobile-board-column { position: relative; flex: 0 0 92vw; min-height: 60vh; scroll-snap-align: center; padding: .8rem; background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%); border: 1px solid var(--border); border-radius: 8px; }
     .mobile-board-column::after { content: ""; position: absolute; pointer-events: none; top: 0; right: 0; bottom: 0; width: 1.5rem; background: linear-gradient(to right, transparent, var(--bg)); opacity: .8; }
     .mobile-board-column h2 { margin-top: 0; }
-    .mobile-board-column .kanban-card { margin: .6rem 0; touch-action: pan-y; }
+    .mobile-board-column .kanban-card { margin: .6rem 0; touch-action: pan-x pan-y; }
     .mobile-board-column .kanban-card.dragging-source { opacity: .35; }
     .touch-drag-placeholder { margin: .6rem 0; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
     .touch-drag-ghost { position: fixed; z-index: 50; pointer-events: none; opacity: .9; transform: rotate(2deg); box-shadow: 0 8px 22px rgba(0,0,0,.25); }

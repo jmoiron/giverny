@@ -131,6 +131,8 @@ a:hover { color: var(--accent); }
     width: 0;
     overflow: hidden;
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
     transition: width 0.18s ease;
 
     &.open {
@@ -141,8 +143,23 @@ a:hover { color: var(--accent); }
     // Fixed-width inner so items never reflow during the width animation.
     .side-nav-inner {
         width: 220px;
+        flex: 1 0 auto;
         padding: 0.85rem 0.5rem 1rem;
     }
+
+    .side-nav-version {
+        position: fixed;
+        left: 0.75rem;
+        bottom: 0.75rem;
+        width: auto;
+        padding: 0;
+        color: var(--muted);
+        font-size: 0.75rem;
+        opacity: 0.7;
+        pointer-events: none;
+    }
+
+    &:not(.open) .side-nav-version { display: none; }
 
     .side-nav-item {
         display: flex;
@@ -222,6 +239,8 @@ html.side-nav-open #side-nav {
     width: 220px;
     overflow-y: auto;
 }
+
+html.side-nav-open #side-nav .side-nav-version { display: block; }
 
 // Hamburger toggle — glows when the side nav is open, color unchanged.
 #side-nav-toggle.active .fa-bars {
