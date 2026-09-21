@@ -1,4 +1,4 @@
-const CACHE = 'giverny-mobile-v17';
+const CACHE = 'giverny-mobile-v18';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',
@@ -9,6 +9,8 @@ const SHELL = [
   '/static/js/mobile.js',
   '/static/js/webauthn.js',
   '/static/mobile.css',
+  '/static/fa/icons.css',
+  '/static/fa/icons.woff2',
   '/static/manifest.webmanifest',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
