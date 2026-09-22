@@ -216,6 +216,98 @@ $(function() {
         }).catch(function() {});
     }
 
+    function updateUnreadNotificationBadge(count) {
+        var $badges = $('.notification-badge');
+        if (!$badges.length) return;
+        count = Number(count || 0);
+        $badges.each(function() {
+            var badge = this;
+            if (count <= 0) {
+                badge.hidden = true;
+                badge.textContent = '';
+            } else {
+                badge.hidden = false;
+                badge.textContent = count > 99 ? '99+' : String(count);
+            }
+        });
+    }
+
+    function loadUnreadNotificationBadge() {
+        if (!$('.notification-badge').length) return;
+        fetch('/api/notifications/unread-count')
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) { if (data) updateUnreadNotificationBadge(data.count); })
+            .catch(function() {});
+    }
+
+    loadUnreadNotificationBadge();
+
+    if (($('#notifications-link').length || $('#mobile-notifications-link').length) && window.createNotificationSocket) {
+        window.createNotificationSocket({
+            onEvent: function(event) {
+                if (event.type !== 'notification.created' && event.type !== 'notification.read') return;
+                var payload = event.payload || {};
+                if (typeof payload.unread_count !== 'undefined') updateUnreadNotificationBadge(payload.unread_count);
+                if (event.type === 'notification.created' && payload.notification_id) {
+                    var page = document.querySelector('.notifications-page');
+                    if (!page || page.getAttribute('data-page') !== '1') return;
+                    fetch('/notifications/' + encodeURIComponent(payload.notification_id) + '/fragment')
+                        .then(function(response) { return response.ok ? response.text() : ''; })
+                        .then(function(html) {
+                            if (!html) return;
+                            var list = page.querySelector('.notifications-list');
+                            if (!list) {
+                                list = document.createElement('div');
+                                list.className = 'notifications-list';
+                                var empty = page.querySelector('.empty-state');
+                                if (empty) empty.replaceWith(list);
+                                else page.appendChild(list);
+                            }
+                            list.insertAdjacentHTML('afterbegin', html);
+                        })
+                        .catch(function() {});
+                }
+            }
+        }).connect();
+    }
+
+    $(document).on('click', '#mark-all-notifications-read', function() {
+        fetch('/api/notifications/read-all', {method: 'POST'})
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                $('.notification-item.unread').removeClass('unread');
+                updateUnreadNotificationBadge(data.unread_count);
+            })
+            .catch(function() {});
+    });
+
+    $(document).on('click', '#delete-read-notifications', function() {
+        fetch('/api/notifications/delete-read', {method: 'POST'})
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                $('.notification-item:not(.unread)').remove();
+                updateUnreadNotificationBadge(data.unread_count);
+            })
+            .catch(function() {});
+    });
+
+    $(document).on('click', '.notification-item', function(event) {
+        if ($(event.target).closest('a').length) return;
+        var item = this;
+        var id = item.getAttribute('data-notification-id');
+        if (!id || !item.classList.contains('unread')) return;
+        fetch('/api/notifications/' + encodeURIComponent(id) + '/read', {method: 'POST'})
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                item.classList.remove('unread');
+                updateUnreadNotificationBadge(data.unread_count);
+            })
+            .catch(function() {});
+    });
+
     $(document).on('click', '.board-notification-toggle', function(e) {
         e.preventDefault();
         e.stopPropagation();

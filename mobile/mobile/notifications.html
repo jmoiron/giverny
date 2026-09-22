@@ -6,7 +6,7 @@
     {{if .notifications}}
     <div class="mobile-notifications-list">
         {{range .notifications}}
-        <a class="mobile-notification-item" href="{{.URL}}">
+        <a class="mobile-notification-item" href="{{.URL}}" data-notification-id="{{.ID}}">
             <i class="fa-solid fa-bell"></i>
             <span><strong>{{if .Message}}{{.Message}}{{else}}{{.Type.Label}}{{end}}</strong><small>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</small></span>
         </a>

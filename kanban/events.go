@@ -31,6 +31,8 @@ const (
 	EventCardCommentAdded        = "card.comment.added"
 	EventCardCommentEdited       = "card.comment.edited"
 	EventCardCommentDeleted      = "card.comment.deleted"
+	EventNotificationCreated     = "notification.created"
+	EventNotificationRead        = "notification.read"
 )
 
 // Event is the envelope sent over every WebSocket connection.
@@ -39,7 +41,13 @@ const (
 type Event struct {
 	Type    string          `json:"type"`
 	Board   string          `json:"board,omitempty"`
+	UserID  int64           `json:"user_id,omitempty"`
 	Payload json.RawMessage `json:"payload,omitempty"`
+}
+
+type NotificationEventPayload struct {
+	NotificationID int64 `json:"notification_id"`
+	UnreadCount    int   `json:"unread_count"`
 }
 
 type EventLabelPayload struct {

@@ -38,43 +38,45 @@ const maxAttachmentSize = 16 << 20
 
 // App is the kanban sub-application.
 type App struct {
-	db           db.DB
-	hub          *Hub
-	boards       *BoardService
-	columns      *ColumnService
-	cards        *CardService
-	labels       *LabelService
-	comments     *CommentService
-	users        *gauth.UserProfileService
-	views        *ViewService
+	db            db.DB
+	hub           *Hub
+	boards        *BoardService
+	columns       *ColumnService
+	cards         *CardService
+	labels        *LabelService
+	comments      *CommentService
+	users         *gauth.UserProfileService
+	views         *ViewService
 	notifications *NotificationService
-	fss          vfs.Registry
-	pushNotifier PushNotifier
+	fss           vfs.Registry
+	pushNotifier  PushNotifier
 }
 
 // PushNotifier receives mutation notifications without coupling kanban to a
 // particular delivery mechanism.
 type PushNotifier interface {
 	NotifyCardAssigned(cardID, assigneeID, actorID int64)
-	NotifyCardEvent(cardID, actorID int64, action string)
-	NotifyNewComment(cardID, actorID int64)
+	NotifyCardEvent(cardID, actorID int64, action string, change NotificationChange)
+	NotifyNewComment(cardID, actorID int64, content string)
 }
 
 func NewApp(dbh db.DB, fss vfs.Registry) *App {
 	hub := NewHub()
 	go hub.Run()
+	boards := NewBoardService(dbh)
+	cards := NewCardService(dbh)
 	return &App{
-		db:       dbh,
-		hub:      hub,
-		boards:   NewBoardService(dbh),
-		columns:  NewColumnService(dbh),
-		cards:    NewCardService(dbh),
-		labels:   NewLabelService(dbh),
-		comments: NewCommentService(dbh),
-		users:    gauth.NewUserProfileService(dbh),
-		views:    NewViewService(dbh),
-		notifications: NewNotificationService(dbh),
-		fss:      fss,
+		db:            dbh,
+		hub:           hub,
+		boards:        boards,
+		columns:       NewColumnService(dbh),
+		cards:         cards,
+		labels:        NewLabelService(dbh),
+		comments:      NewCommentService(dbh),
+		users:         gauth.NewUserProfileService(dbh),
+		views:         NewViewService(dbh),
+		notifications: NewNotificationService(dbh, boards, cards),
+		fss:           fss,
 	}
 }
 
@@ -96,11 +98,11 @@ type CommentDisplay struct {
 
 func (a *App) Name() string { return "kanban" }
 
-func (a *App) Boards() *BoardService          { return a.boards }
-func (a *App) Cards() *CardService            { return a.cards }
-func (a *App) Columns() *ColumnService        { return a.columns }
+func (a *App) Boards() *BoardService               { return a.boards }
+func (a *App) Cards() *CardService                 { return a.cards }
+func (a *App) Columns() *ColumnService             { return a.columns }
 func (a *App) Notifications() *NotificationService { return a.notifications }
-func (a *App) SetPushNotifier(n PushNotifier) { a.pushNotifier = n }
+func (a *App) SetPushNotifier(n PushNotifier)      { a.pushNotifier = n }
 
 func (a *App) CanViewBoard(board *Board, user *gauth.User) bool {
 	return canViewBoard(board, user)
@@ -293,6 +295,7 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("kanban/card_list.html", templates)
 	reg.AddPathFS("kanban/view_list.html", templates)
 	reg.AddPathFS("kanban/notifications.html", templates)
+	reg.AddPathFS("kanban/notification_item.html", templates)
 }
 
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
@@ -300,26 +303,60 @@ func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
 func (a *App) Bind(r chi.Router) {
 	r.Route("/notifications", func(r chi.Router) {
 		r.Use(gauth.RequireAuth)
+		r.Get("/ws", a.handleWS)
+		r.Get("/{notificationID}/fragment", a.handleNotificationFragment)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		user := gauth.UserFromContext(r.Context())
-		notifications, err := a.notifications.RecentForUser(user.ID, 50)
-		if err != nil {
-			app.Http500("loading notifications", w, err)
-			return
-		}
-		if err := mtr.RegistryFromContext(r.Context()).RenderWithBase(w, "base", "kanban/notifications.html", mtr.Ctx{"title": "notifications", "user": user, "notifications": notifications}); err != nil {
-			app.Http500("rendering notifications", w, err)
-		}
-	})
+			user := gauth.UserFromContext(r.Context())
+			page := 1
+			if parsed, parseErr := strconv.Atoi(r.URL.Query().Get("page")); parseErr == nil && parsed > 0 {
+				page = parsed
+			}
+			const pageSize = 20
+			notifications, err := a.notifications.RecentForUserPage(user.ID, pageSize, (page-1)*pageSize)
+			if err != nil {
+				app.Http500("loading notifications", w, err)
+				return
+			}
+			total, err := a.notifications.CountForUser(user.ID)
+			if err != nil {
+				app.Http500("counting notifications", w, err)
+				return
+			}
+			reg := mtr.RegistryFromContext(r.Context())
+			items := make([]template.HTML, 0, len(notifications))
+			for i := range notifications {
+				var item bytes.Buffer
+				if err := reg.Render(&item, "kanban/notification_item.html", notificationTemplateContext(&notifications[i])); err != nil {
+					app.Http500("rendering notification", w, err)
+					return
+				}
+				items = append(items, template.HTML(item.String()))
+			}
+			if err := reg.RenderWithBase(w, "base", "kanban/notifications.html", mtr.Ctx{"title": "notifications", "user": user, "notificationHTML": items, "page": page, "previousPage": page - 1, "nextPage": page + 1, "hasPrevious": page > 1, "hasNext": page*pageSize < total}); err != nil {
+				app.Http500("rendering notifications", w, err)
+			}
+		})
 	})
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(gauth.RequireAuth)
+		r.Get("/notifications/unread-count", func(w http.ResponseWriter, r *http.Request) {
+			user := gauth.UserFromContext(r.Context())
+			count, err := a.notifications.UnreadCount(user.ID)
+			if err != nil {
+				apiErr(w, http.StatusInternalServerError, "could not load unread notifications")
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]int{"count": count})
+		})
 		r.Get("/nav-boards/", a.handleNavBoards)
 		r.Get("/nav-views/", a.handleNavViews)
 		r.Post("/views/", a.handleSaveView)
 		r.Post("/views/{viewID}/edit", a.handleEditView)
 		r.Post("/views/{viewID}/delete", a.handleDeleteView)
+		r.Post("/notifications/{notificationID}/read", a.handleMarkNotificationRead)
+		r.Post("/notifications/read-all", a.handleMarkAllNotificationsRead)
+		r.Post("/notifications/delete-read", a.handleDeleteReadNotifications)
 	})
 
 	r.Route("/cards", func(r chi.Router) {
@@ -410,6 +447,79 @@ func (a *App) Bind(r chi.Router) {
 			})
 		})
 	})
+}
+
+func (a *App) handleNotificationFragment(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	notificationID, err := parseID(chi.URLParam(r, "notificationID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	notification, err := a.notifications.GetForUser(user.ID, notificationID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := mtr.RegistryFromContext(r.Context()).Render(w, "kanban/notification_item.html", notificationTemplateContext(notification)); err != nil {
+		app.Http500("rendering notification", w, err)
+	}
+}
+
+func notificationTemplateContext(notification *UserNotification) mtr.Ctx {
+	return mtr.Ctx{
+		"ID": notification.ID, "ActorID": notification.ActorID, "BoardID": notification.BoardID,
+		"CardID": notification.CardID, "Type": notification.Type, "Message": notification.Message,
+		"URL": notification.URL, "CreatedAt": notification.CreatedAt, "ReadAt": notification.ReadAt,
+		"OldTitle": notification.OldTitle, "NewTitle": notification.NewTitle,
+		"OldContent": notification.OldContent, "NewContent": notification.NewContent,
+		"Card": notification.Card, "Board": notification.Board, "Actor": notification.Actor,
+	}
+}
+
+func (a *App) handleMarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	notificationID, err := parseID(chi.URLParam(r, "notificationID"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, "invalid notification id")
+		return
+	}
+	if err := a.notifications.MarkRead(user.ID, notificationID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not mark notification as read")
+		return
+	}
+	count, err := a.notifications.UnreadCount(user.ID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not load unread notifications")
+		return
+	}
+	a.PublishUserEvent(user.ID, EventNotificationRead, NotificationEventPayload{NotificationID: notificationID, UnreadCount: count})
+	writeJSON(w, http.StatusOK, NotificationEventPayload{NotificationID: notificationID, UnreadCount: count})
+}
+
+func (a *App) handleMarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	if err := a.notifications.MarkAllRead(user.ID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not mark notifications as read")
+		return
+	}
+	a.PublishUserEvent(user.ID, EventNotificationRead, NotificationEventPayload{UnreadCount: 0})
+	writeJSON(w, http.StatusOK, NotificationEventPayload{UnreadCount: 0})
+}
+
+func (a *App) handleDeleteReadNotifications(w http.ResponseWriter, r *http.Request) {
+	user := gauth.UserFromContext(r.Context())
+	if err := a.notifications.DeleteRead(user.ID); err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not delete read notifications")
+		return
+	}
+	count, err := a.notifications.UnreadCount(user.ID)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, "could not load unread notifications")
+		return
+	}
+	a.PublishUserEvent(user.ID, EventNotificationRead, NotificationEventPayload{UnreadCount: count})
+	writeJSON(w, http.StatusOK, NotificationEventPayload{UnreadCount: count})
 }
 
 // handleCardList renders the cross-board card list view with sortable columns and filters.
@@ -820,14 +930,16 @@ func (a *App) handleNavBoards(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleWS(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	user := gauth.UserFromContext(r.Context())
-	board, err := a.boards.GetBySlug(slug)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	if !canViewBoard(board, user) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
+	if slug != "" {
+		board, err := a.boards.GetBySlug(slug)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if !canViewBoard(board, user) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
@@ -837,9 +949,10 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 
 	client := &Client{
-		board: slug,
-		send:  make(chan []byte, 64),
-		conn:  conn,
+		board:  slug,
+		userID: user.ID,
+		send:   make(chan []byte, 64),
+		conn:   conn,
 	}
 	a.hub.Register(client)
 	defer a.hub.Unregister(client)
@@ -898,6 +1011,15 @@ func (a *App) publishBoardEvent(board, eventType string, payload any) {
 		Board:   board,
 		Payload: data,
 	})
+}
+
+func (a *App) PublishUserEvent(userID int64, eventType string, payload any) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("marshal websocket user event payload", "type", eventType, "user_id", userID, "err", err)
+		return
+	}
+	a.hub.Publish(Event{Type: eventType, UserID: userID, Payload: data})
 }
 
 func parseID(s string) (int64, error) {
@@ -1255,12 +1377,12 @@ func (a *App) handleBoardList(w http.ResponseWriter, r *http.Request) {
 	}
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board_list.html", mtr.Ctx{
-		"title":   "boards",
-		"boards":  boards,
-		"user":    user,
-		"isAdmin": user.IsAdmin(),
+		"title":                "boards",
+		"boards":               boards,
+		"user":                 user,
+		"isAdmin":              user.IsAdmin(),
 		"notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled,
-		"boardNotifications": boardNotifications,
+		"boardNotifications":   boardNotifications,
 	}); err != nil {
 		app.Http500("rendering board list", w, err)
 	}
@@ -1446,17 +1568,17 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 
 	reg := mtr.RegistryFromContext(r.Context())
 	if err := reg.RenderWithBase(w, "base", "kanban/board.html", mtr.Ctx{
-		"title":          board.Name,
-		"board":          board,
-		"columns":        columnsWithCards,
-		"archived":       renderedArchived,
-		"user":           user,
-		"isAdmin":        user != nil && user.IsAdmin(),
-		"canEdit":        canEdit,
-		"cardModalShell": cardModalShell,
-		"mainClass":      "board-main",
+		"title":                board.Name,
+		"board":                board,
+		"columns":              columnsWithCards,
+		"archived":             renderedArchived,
+		"user":                 user,
+		"isAdmin":              user != nil && user.IsAdmin(),
+		"canEdit":              canEdit,
+		"cardModalShell":       cardModalShell,
+		"mainClass":            "board-main",
 		"notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled,
-		"boardNotifications": boardNotifications,
+		"boardNotifications":   boardNotifications,
 	}); err != nil {
 		app.Http500("rendering board", w, err)
 	}
@@ -1659,7 +1781,7 @@ func (a *App) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		HTML:     html,
 	})
 	if a.pushNotifier != nil {
-		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "new_card")
+		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "new_card", NotificationChange{NewTitle: card.Title, NewContent: card.Content})
 	}
 	w.Header().Set("Content-Type", "text/html")
 	if _, err := io.WriteString(w, html); err != nil {
@@ -2000,7 +2122,7 @@ func (a *App) handleUpdateCard(w http.ResponseWriter, r *http.Request) {
 	}
 	if prevCard.Title != card.Title || prevCard.Content != card.Content {
 		if a.pushNotifier != nil {
-			go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_updated")
+			go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_updated", NotificationChange{OldTitle: prevCard.Title, NewTitle: card.Title, OldContent: prevCard.Content, NewContent: card.Content})
 		}
 	}
 	resp := a.cardResponse(r, card)
@@ -2047,7 +2169,7 @@ func (a *App) handleMarkDone(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.cards.RecordSubscriptionMessage(card.ID, user.Username+" marked the card done")
 	if prevCard.ColumnID != card.ColumnID && a.pushNotifier != nil {
-		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_closed")
+		go a.pushNotifier.NotifyCardEvent(card.ID, user.ID, "card_closed", NotificationChange{})
 	}
 }
 
@@ -2598,7 +2720,7 @@ func (a *App) handleArchiveCard(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" archived the card")
 	if a.pushNotifier != nil {
-		go a.pushNotifier.NotifyCardEvent(cardID, user.ID, "card_closed")
+		go a.pushNotifier.NotifyCardEvent(cardID, user.ID, "card_closed", NotificationChange{})
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -2800,7 +2922,7 @@ func (a *App) handleCreateComment(w http.ResponseWriter, r *http.Request) {
 	a.publishBoardEvent(slug, EventCardCommentAdded, payload)
 	_ = a.cards.RecordSubscriptionMessage(cardID, user.Username+" added a comment")
 	if a.pushNotifier != nil {
-		go a.pushNotifier.NotifyNewComment(cardID, user.ID)
+		go a.pushNotifier.NotifyNewComment(cardID, user.ID, body)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "comment": payload})
 }

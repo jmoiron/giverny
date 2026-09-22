@@ -10,9 +10,10 @@ import (
 
 // Client is a single connected WebSocket client.
 type Client struct {
-	board string
-	send  chan []byte
-	conn  *websocket.Conn
+	board  string
+	userID int64
+	send   chan []byte
+	conn   *websocket.Conn
 }
 
 // writePump drains the send channel and writes outbound messages to the
@@ -78,7 +79,15 @@ func (h *Hub) Run() {
 				slog.Error("hub marshal event", "err", err)
 				continue
 			}
-			if evt.Board == BoardGlobal {
+			if evt.UserID != 0 {
+				for _, bucket := range h.clients {
+					for c := range bucket {
+						if c.userID == evt.UserID {
+							h.fanOut(map[*Client]struct{}{c: struct{}{}}, data)
+						}
+					}
+				}
+			} else if evt.Board == BoardGlobal {
 				// Global: deliver to every connected client.
 				for _, bucket := range h.clients {
 					h.fanOut(bucket, data)

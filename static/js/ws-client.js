@@ -17,7 +17,8 @@
             if (closed || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) return;
             setState('connecting');
             var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-            socket = new WebSocket(protocol + '://' + location.host + '/boards/' + encodeURIComponent(boardSlug) + '/ws');
+            var path = boardSlug ? '/boards/' + encodeURIComponent(boardSlug) + '/ws' : '/notifications/ws';
+            socket = new WebSocket(protocol + '://' + location.host + path);
             connectTimer = setTimeout(function () { if (socket && socket.readyState === WebSocket.CONNECTING) socket.close(); }, timeout);
             socket.onopen = function () { clearTimeout(connectTimer); delay = 1000; setState('connected'); };
             socket.onmessage = function (event) {
@@ -28,5 +29,8 @@
         }
         function close() { closed = true; clearTimeout(connectTimer); clearTimeout(reconnectTimer); if (socket) socket.close(); }
         return {connect: connect, close: close};
+    };
+    global.createNotificationSocket = function (options) {
+        return global.createBoardSocket('', options);
     };
 }(window));

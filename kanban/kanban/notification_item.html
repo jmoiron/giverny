@@ -1,0 +1,47 @@
+<article class="notification-item{{if not .ReadAt}} unread{{end}}" data-notification-id="{{.ID}}">
+    <span class="notification-item-icon"><i class="fa-solid {{.Type.Icon}}"></i></span>
+    <div class="notification-item-content">
+        <div class="notification-item-header">
+            <div class="notification-item-body">
+                <div class="notification-item-description">
+                    {{if .Actor}}<span class="notification-actor">{{if .Actor.ProfileImageURI}}<img class="notification-actor-avatar" src="{{.Actor.ProfileImageURI}}" alt="">{{end}}<span class="notification-actor-name">{{.Actor.Username}}</span></span>{{end}}
+                    <span>{{.Type.Verb}}</span>
+                    {{if .Card}}<span>card <a href="{{if .Board}}/boards/{{.Board.Slug}}/cards/{{.Card.ID}}/{{else}}{{.URL}}{{end}}">{{.Card.Title}}</a>{{if .Board}} on board <a href="/boards/{{.Board.Slug}}/">{{.Board.Name}}</a>{{end}}</span>{{end}}
+                    <span class="notification-item-date">on {{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                </div>
+            </div>
+        </div>
+        {{if .Card}}
+        <div class="notification-card-wrap">
+            <a class="notification-card-link" href="{{if .Board}}/boards/{{.Board.Slug}}/cards/{{.Card.ID}}/{{else}}{{.URL}}{{end}}">
+                <div class="kanban-card notification-card{{if .Card.Color}} has-card-color{{end}}" data-id="{{.Card.ID}}"{{if .Card.Color}} style="--card-color: {{.Card.Color}}"{{end}}>
+                    <div class="card-title">{{.Card.Title}}</div>
+                    <div class="kanban-card-checklist-progress-slot{{if not .Card.ChecklistTotal}} is-empty{{end}}">
+                        <div class="kanban-card-checklist-progress{{if .Card.Color}} has-card-color{{end}}"{{if not .Card.ChecklistTotal}} hidden{{end}}{{if .Card.Color}} style="--card-color: {{.Card.Color}}"{{end}}>
+                            <span class="kanban-card-checklist-copy">{{.Card.ChecklistDone}}/{{.Card.ChecklistTotal}} {{.Card.ChecklistPct}}%</span>
+                            <span class="kanban-card-checklist-bar"><span class="kanban-card-checklist-fill" style="width: {{.Card.ChecklistPct}}%;"></span></span>
+                        </div>
+                    </div>
+                    {{if .Card.Labels}}
+                    <div class="card-labels">
+                        {{range .Card.Labels}}<span class="label-pill {{.TextClass}}" style="--label-color: {{.Color}}">{{.Title}}</span>{{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </a>
+        </div>
+        {{end}}
+        {{if or (and .OldTitle (ne .OldTitle .NewTitle)) (and .NewTitle (ne .OldTitle .NewTitle))}}
+        <div class="notification-change">
+            <strong>title</strong>
+            <div class="notification-diff">{{if .OldTitle}}<del>{{.OldTitle}}</del>{{end}}{{if .NewTitle}}<ins>{{.NewTitle}}</ins>{{end}}</div>
+        </div>
+        {{end}}
+        {{if or (and .OldContent (ne .OldContent .NewContent)) (and .NewContent (ne .OldContent .NewContent))}}
+        <div class="notification-change">
+            {{if ne .Type.Label "new comment"}}<strong>content</strong>{{end}}
+            <div class="notification-diff">{{if .OldContent}}<del>{{.OldContent}}</del>{{end}}{{if .NewContent}}<ins>{{.NewContent}}</ins>{{end}}</div>
+        </div>
+        {{end}}
+    </div>
+</article>

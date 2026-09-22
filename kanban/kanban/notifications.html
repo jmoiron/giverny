@@ -1,16 +1,21 @@
-<div class="page-wrap notifications-page">
-    <h2>notifications</h2>
-    {{if .notifications}}
+<div class="page-wrap notifications-page" data-page="{{.page}}">
+    <div class="notifications-heading">
+        <h2>notifications</h2>
+        <div class="notifications-actions">
+            <button type="button" class="notification-action" id="mark-all-notifications-read" title="mark all notifications as read" aria-label="mark all notifications as read"><i class="fa-solid fa-envelope-circle-check"></i></button>
+            <button type="button" class="notification-action danger" id="delete-read-notifications" title="delete all read notifications" aria-label="delete all read notifications"><i class="fa-solid fa-dumpster-fire"></i></button>
+        </div>
+    </div>
+    {{if .notificationHTML}}
     <div class="notifications-list">
-        {{range .notifications}}
-        <a class="notification-item" href="{{.URL}}">
-            <span class="notification-item-icon"><i class="fa-solid fa-bell"></i></span>
-            <span class="notification-item-body">
-                <strong>{{if .Message}}{{.Message}}{{else}}{{.Type.Label}}{{end}}</strong>
-                <small>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</small>
-            </span>
-        </a>
-        {{end}}
+        {{range .notificationHTML}}{{.}}{{end}}
     </div>
     {{else}}<p class="empty-state">no notifications yet</p>{{end}}
+    {{if or .hasPrevious .hasNext}}
+    <nav class="notifications-pagination" aria-label="notifications pages">
+        {{if .hasPrevious}}<a href="/notifications/?page={{.previousPage}}">previous</a>{{end}}
+        <span>page {{.page}}</span>
+        {{if .hasNext}}<a href="/notifications/?page={{.nextPage}}">next</a>{{end}}
+    </nav>
+    {{end}}
 </div>

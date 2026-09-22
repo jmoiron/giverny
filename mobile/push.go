@@ -172,18 +172,18 @@ func (p *PushService) NotifyCardAssigned(cardID, assigneeID, actorID int64) {
 	if assigneeID == actorID {
 		return
 	}
-	p.notifyRecipients([]int64{assigneeID}, cardID, actorID, gauth.NotificationCardAssigned, "card assigned to you")
+	p.notifyRecipients([]int64{assigneeID}, cardID, actorID, gauth.NotificationCardAssigned, "card assigned to you", kanban.NotificationChange{})
 }
 
-func (p *PushService) NotifyCardEvent(cardID, actorID int64, action string) {
+func (p *PushService) NotifyCardEvent(cardID, actorID int64, action string, change kanban.NotificationChange) {
 	recipients, err := p.kanban.Cards().NotificationRecipients(cardID)
 	if err != nil {
 		return
 	}
-	p.notifyRecipients(recipients, cardID, actorID, action, notificationMessage(action))
+	p.notifyRecipients(recipients, cardID, actorID, action, notificationMessage(action), change)
 }
 
-func (p *PushService) NotifyNewComment(cardID, actorID int64) {
+func (p *PushService) NotifyNewComment(cardID, actorID int64, content string) {
 	recipients, err := p.kanban.Cards().NotificationOwners(cardID)
 	if err != nil {
 		return
@@ -201,7 +201,7 @@ func (p *PushService) NotifyNewComment(cardID, actorID int64) {
 			filtered = append(filtered, id)
 		}
 	}
-	p.notifyRecipients(filtered, cardID, actorID, gauth.NotificationCardComment, "new comment on a card you follow")
+	p.notifyRecipients(filtered, cardID, actorID, gauth.NotificationCardComment, "new comment on a card you follow", kanban.NotificationChange{NewContent: content})
 }
 
 func notificationMessage(action string) string {
@@ -219,7 +219,7 @@ func notificationMessage(action string) string {
 	}
 }
 
-func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, action, message string) {
+func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, action, message string, change kanban.NotificationChange) {
 	card, err := p.kanban.Cards().Get(cardID)
 	if err != nil {
 		return
@@ -249,7 +249,11 @@ func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, a
 		if settings.DeliveryMode == gauth.NotificationPush || settings.DeliveryMode == gauth.NotificationPushEmail {
 			pushRecipients = append(pushRecipients, userID)
 		}
-		_ = p.kanban.Notifications().Create(userID, actorID, board.ID, card.ID, notificationTypeForAction(action), notificationURL)
+		if notificationID, err := p.kanban.Notifications().Create(userID, actorID, board.ID, card.ID, notificationTypeForAction(action), notificationURL, change); err == nil {
+			if unreadCount, countErr := p.kanban.Notifications().UnreadCount(userID); countErr == nil {
+				p.kanban.PublishUserEvent(userID, kanban.EventNotificationCreated, kanban.NotificationEventPayload{NotificationID: notificationID, UnreadCount: unreadCount})
+			}
+		}
 	}
 	if len(pushRecipients) == 0 {
 		return

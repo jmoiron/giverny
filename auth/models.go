@@ -147,13 +147,22 @@ var NotificationMigrations = monarch.Set{
 		);`,
 		Down: `DROP TABLE user_notification;`,
 	}, {
-		Up: `ALTER TABLE notification_setting ADD COLUMN card_comment BOOLEAN NOT NULL DEFAULT 1;`,
+		Up:   `ALTER TABLE notification_setting ADD COLUMN card_comment BOOLEAN NOT NULL DEFAULT 1;`,
 		Down: `SELECT 1;`,
 	}, {
 		Up: `ALTER TABLE user_notification ADD COLUMN actor_id INTEGER NOT NULL DEFAULT 0;
 		ALTER TABLE user_notification ADD COLUMN board_id INTEGER NOT NULL DEFAULT 0;
 		ALTER TABLE user_notification ADD COLUMN card_id INTEGER NOT NULL DEFAULT 0;
 		ALTER TABLE user_notification ADD COLUMN notification_type TEXT NOT NULL DEFAULT 'legacy';`,
+		Down: `SELECT 1;`,
+	}, {
+		Up:   `ALTER TABLE user_notification ADD COLUMN read_at DATETIME;`,
+		Down: `SELECT 1;`,
+	}, {
+		Up: `ALTER TABLE user_notification ADD COLUMN old_title TEXT NOT NULL DEFAULT '';
+		ALTER TABLE user_notification ADD COLUMN new_title TEXT NOT NULL DEFAULT '';
+		ALTER TABLE user_notification ADD COLUMN old_content TEXT NOT NULL DEFAULT '';
+		ALTER TABLE user_notification ADD COLUMN new_content TEXT NOT NULL DEFAULT '';`,
 		Down: `SELECT 1;`,
 	}},
 }

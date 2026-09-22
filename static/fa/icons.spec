@@ -7,12 +7,14 @@ fa-solid fa-right-from-bracket
 fa-solid fa-right-to-bracket
 fa-solid fa-gear
 fa-solid fa-envelope
+fa-solid fa-envelope-circle-check
 fa-solid fa-plus
 fa-solid fa-xmark
 fa-solid fa-check
 fa-solid fa-pen
 fa-solid fa-pen-to-square
 fa-solid fa-trash
+fa-solid fa-dumpster-fire
 fa-solid fa-grip-vertical
 fa-solid fa-ellipsis-vertical
 fa-solid fa-window-minimize
@@ -33,6 +35,7 @@ fa-solid fa-tag
 fa-solid fa-tags
 fa-solid fa-list-check
 fa-solid fa-comment
+fa-solid fa-comment-dots
 fa-solid fa-comments
 fa-solid fa-paperclip
 fa-solid fa-file

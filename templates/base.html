@@ -17,6 +17,7 @@
         <link rel="stylesheet" href="/static/style.css">
         {{end}}
         <script src="/static/js/cash.min.js"></script>
+        <script src="/static/js/ws-client.js" defer></script>
         <script src="/static/js/app.js" defer></script>
         <script src="/static/js/webauthn.js" defer></script>
         <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
@@ -59,6 +60,7 @@
                     </a>
                     <a href="/notifications/" class="nav-icon-link" id="notifications-link" title="notifications" aria-label="notifications">
                         <i class="fa-solid fa-bell nav-icon"></i>
+                        <span class="notification-badge" hidden></span>
                     </a>
                     <div class="user-menu-wrap">
                         <button class="user-menu-trigger" id="user-menu-trigger">

@@ -24,7 +24,12 @@ var NotificationMigrations = monarch.Set{
 			actor_id INTEGER NOT NULL DEFAULT 0,
 			board_id INTEGER NOT NULL DEFAULT 0,
 			card_id INTEGER NOT NULL DEFAULT 0,
-			notification_type TEXT NOT NULL DEFAULT 'legacy'
+			notification_type TEXT NOT NULL DEFAULT 'legacy',
+			read_at DATETIME,
+			old_title TEXT NOT NULL DEFAULT '',
+			new_title TEXT NOT NULL DEFAULT '',
+			old_content TEXT NOT NULL DEFAULT '',
+			new_content TEXT NOT NULL DEFAULT ''
 		);`,
 		Down: `DROP TABLE user_notification;`,
 	}},
@@ -57,15 +62,57 @@ func (t NotificationType) Label() string {
 	}
 }
 
+func (t NotificationType) Verb() string {
+	switch t {
+	case NotificationTypeNewAssignment:
+		return "assigned"
+	case NotificationTypeNewComment:
+		return "commented on"
+	case NotificationTypeNewCard:
+		return "created"
+	case NotificationTypeCardClosed:
+		return "closed"
+	case NotificationTypeCardUpdated:
+		return "updated"
+	default:
+		return "updated"
+	}
+}
+
+func (t NotificationType) Icon() string {
+	switch t {
+	case NotificationTypeNewAssignment:
+		return "fa-user-plus"
+	case NotificationTypeNewComment:
+		return "fa-comment-dots"
+	case NotificationTypeNewCard:
+		return "fa-plus"
+	case NotificationTypeCardClosed:
+		return "fa-check"
+	case NotificationTypeCardUpdated:
+		return "fa-pen"
+	default:
+		return "fa-bell"
+	}
+}
+
 type UserNotification struct {
-	ID        int64            `db:"id"`
-	ActorID   int64            `db:"actor_id"`
-	BoardID   int64            `db:"board_id"`
-	CardID    int64            `db:"card_id"`
-	Type      NotificationType `db:"notification_type"`
-	Message   string           `db:"message"`
-	URL       string           `db:"url"`
-	CreatedAt time.Time        `db:"created_at"`
+	ID         int64            `db:"id"`
+	ActorID    int64            `db:"actor_id"`
+	BoardID    int64            `db:"board_id"`
+	CardID     int64            `db:"card_id"`
+	Type       NotificationType `db:"notification_type"`
+	Message    string           `db:"message"`
+	URL        string           `db:"url"`
+	CreatedAt  time.Time        `db:"created_at"`
+	ReadAt     *time.Time       `db:"read_at"`
+	OldTitle   string           `db:"old_title"`
+	NewTitle   string           `db:"new_title"`
+	OldContent string           `db:"old_content"`
+	NewContent string           `db:"new_content"`
+	Card       *Card            `db:"-"`
+	Board      *Board           `db:"-"`
+	Actor      *gauth.User      `db:"-"`
 }
 
 // Board visibility levels.
