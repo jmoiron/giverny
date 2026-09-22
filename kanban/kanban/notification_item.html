@@ -6,14 +6,14 @@
                 <div class="notification-item-description">
                     {{if .Actor}}<span class="notification-actor">{{if .Actor.ProfileImageURI}}<img class="notification-actor-avatar" src="{{.Actor.ProfileImageURI}}" alt="">{{end}}<span class="notification-actor-name">{{.Actor.Username}}</span></span>{{end}}
                     <span>{{.Type.Verb}}</span>
-                    {{if .Card}}<span>card <a href="{{if .Board}}/boards/{{.Board.Slug}}/cards/{{.Card.ID}}/{{else}}{{.URL}}{{end}}">{{.Card.Title}}</a>{{if .Board}} on board <a href="/boards/{{.Board.Slug}}/">{{.Board.Name}}</a>{{end}}</span>{{end}}
+                    {{if .Card}}<span>card <a href="{{if .Board}}/boards/{{.Board.Slug}}/#card-{{.Card.ID}}{{else}}{{.URL}}{{end}}">{{.Card.Title}}</a>{{if .Board}} on board <a href="/boards/{{.Board.Slug}}/">{{.Board.Name}}</a>{{end}}</span>{{end}}
                     <span class="notification-item-date">on {{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
                 </div>
             </div>
         </div>
         {{if .Card}}
         <div class="notification-card-wrap">
-            <a class="notification-card-link" href="{{if .Board}}/boards/{{.Board.Slug}}/cards/{{.Card.ID}}/{{else}}{{.URL}}{{end}}">
+                <a class="notification-card-link" href="{{if .Board}}/boards/{{.Board.Slug}}/#card-{{.Card.ID}}{{else}}{{.URL}}{{end}}">
                 <div class="kanban-card notification-card{{if .Card.Color}} has-card-color{{end}}" data-id="{{.Card.ID}}"{{if .Card.Color}} style="--card-color: {{.Card.Color}}"{{end}}>
                     <div class="card-title">{{.Card.Title}}</div>
                     <div class="kanban-card-checklist-progress-slot{{if not .Card.ChecklistTotal}} is-empty{{end}}">
@@ -31,16 +31,16 @@
             </a>
         </div>
         {{end}}
-        {{if or (and .OldTitle (ne .OldTitle .NewTitle)) (and .NewTitle (ne .OldTitle .NewTitle))}}
+        {{if .TitleDiff}}
         <div class="notification-change">
             <strong>title</strong>
-            <div class="notification-diff">{{if .OldTitle}}<del>{{.OldTitle}}</del>{{end}}{{if .NewTitle}}<ins>{{.NewTitle}}</ins>{{end}}</div>
+            <div class="unified-diff">{{range .TitleDiff}}<div class="{{.Class}}">{{if .Parts}}{{.Prefix}}{{range .Parts}}<span class="{{.Class}}">{{.Text}}</span>{{end}}{{else}}{{.Text}}{{end}}</div>{{end}}</div>
         </div>
         {{end}}
-        {{if or (and .OldContent (ne .OldContent .NewContent)) (and .NewContent (ne .OldContent .NewContent))}}
+        {{if .ContentDiff}}
         <div class="notification-change">
             {{if ne .Type.Label "new comment"}}<strong>content</strong>{{end}}
-            <div class="notification-diff">{{if .OldContent}}<del>{{.OldContent}}</del>{{end}}{{if .NewContent}}<ins>{{.NewContent}}</ins>{{end}}</div>
+            {{if .OldContent}}<div class="unified-diff">{{range .ContentDiff}}<div class="{{.Class}}">{{if .Parts}}{{.Prefix}}{{range .Parts}}<span class="{{.Class}}">{{.Text}}</span>{{end}}{{else}}{{.Text}}{{end}}</div>{{end}}</div>{{else}}<div class="notification-new-content">{{.NewContent}}</div>{{end}}
         </div>
         {{end}}
     </div>

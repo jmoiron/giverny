@@ -473,6 +473,7 @@ func notificationTemplateContext(notification *UserNotification) mtr.Ctx {
 		"URL": notification.URL, "CreatedAt": notification.CreatedAt, "ReadAt": notification.ReadAt,
 		"OldTitle": notification.OldTitle, "NewTitle": notification.NewTitle,
 		"OldContent": notification.OldContent, "NewContent": notification.NewContent,
+		"TitleDiff": notification.TitleDiff, "ContentDiff": notification.ContentDiff,
 		"Card": notification.Card, "Board": notification.Board, "Actor": notification.Actor,
 	}
 }
@@ -509,7 +510,8 @@ func (a *App) handleMarkAllNotificationsRead(w http.ResponseWriter, r *http.Requ
 
 func (a *App) handleDeleteReadNotifications(w http.ResponseWriter, r *http.Request) {
 	user := gauth.UserFromContext(r.Context())
-	if err := a.notifications.DeleteRead(user.ID); err != nil {
+	deletedIDs, err := a.notifications.DeleteRead(user.ID)
+	if err != nil {
 		apiErr(w, http.StatusInternalServerError, "could not delete read notifications")
 		return
 	}
@@ -518,8 +520,9 @@ func (a *App) handleDeleteReadNotifications(w http.ResponseWriter, r *http.Reque
 		apiErr(w, http.StatusInternalServerError, "could not load unread notifications")
 		return
 	}
-	a.PublishUserEvent(user.ID, EventNotificationRead, NotificationEventPayload{UnreadCount: count})
-	writeJSON(w, http.StatusOK, NotificationEventPayload{UnreadCount: count})
+	payload := NotificationEventPayload{NotificationIDs: deletedIDs, UnreadCount: count}
+	a.PublishUserEvent(user.ID, EventNotificationDeleted, payload)
+	writeJSON(w, http.StatusOK, payload)
 }
 
 // handleCardList renders the cross-board card list view with sortable columns and filters.

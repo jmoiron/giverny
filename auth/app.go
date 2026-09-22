@@ -66,7 +66,6 @@ func (a *App) Migrate() error {
 	return nil
 }
 
-
 func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("auth/login.html", templates)
 	reg.AddPathFS("auth/invite.html", templates)
@@ -355,13 +354,13 @@ func (a *App) renderUserSettingsWithBase(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if err := reg.RenderWithBase(w, base, "auth/settings.html", mtr.Ctx{
-		"title":     "settings",
-		"user":      user,
-		"mobile":    base == "mobile-base",
+		"title":         "settings",
+		"user":          user,
+		"mobile":        base == "mobile-base",
 		"notifications": notifications,
-		"timezones": settingsTimezones,
-		"saved":     saved,
-		"error":     errMsg,
+		"timezones":     settingsTimezones,
+		"saved":         saved,
+		"error":         errMsg,
 	}); err != nil {
 		app.Http500("rendering settings", w, err)
 	}
@@ -435,7 +434,7 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if notificationsChanged {
 		if err := a.users.UpdateNotificationSettings(user.ID, NotificationSettings{
-			DeliveryMode:  r.FormValue("notification_delivery_mode"),
+			DeliveryMode: r.FormValue("notification_delivery_mode"),
 			NewCard:      r.FormValue("notification_new_card") != "",
 			CardClosed:   r.FormValue("notification_card_closed") != "",
 			CardUpdated:  r.FormValue("notification_card_updated") != "",
@@ -449,11 +448,11 @@ func (a *App) handleUserSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if wantsJSON {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":                     true,
-			"profile_image_uri":      avatarURI,
-			"timezone":               timezone,
-			"auto_assign_cards":      autoAssign,
-			"disable_passkey_prompt": disablePasskeyPrompt,
+			"ok":                         true,
+			"profile_image_uri":          avatarURI,
+			"timezone":                   timezone,
+			"auto_assign_cards":          autoAssign,
+			"disable_passkey_prompt":     disablePasskeyPrompt,
 			"notification_delivery_mode": r.FormValue("notification_delivery_mode"),
 		})
 		return

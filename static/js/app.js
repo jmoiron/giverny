@@ -245,27 +245,55 @@ $(function() {
     if (($('#notifications-link').length || $('#mobile-notifications-link').length) && window.createNotificationSocket) {
         window.createNotificationSocket({
             onEvent: function(event) {
-                if (event.type !== 'notification.created' && event.type !== 'notification.read') return;
+                if (event.type !== 'notification.created' && event.type !== 'notification.read' && event.type !== 'notification.deleted') return;
                 var payload = event.payload || {};
                 if (typeof payload.unread_count !== 'undefined') updateUnreadNotificationBadge(payload.unread_count);
+                if (event.type === 'notification.read') {
+                    var notificationSelector = '.notification-item[data-notification-id="' + String(payload.notification_id || '') + '"], .mobile-notification-item[data-notification-id="' + String(payload.notification_id || '') + '"]';
+                    if (payload.notification_id) $(notificationSelector).removeClass('unread');
+                    else $('.notification-item.unread, .mobile-notification-item.unread').removeClass('unread');
+                }
+                if (event.type === 'notification.deleted' && payload.notification_ids) {
+                    payload.notification_ids.forEach(function(id) {
+                        $('.notification-item[data-notification-id="' + String(id) + '"], .mobile-notification-item[data-notification-id="' + String(id) + '"]').remove();
+                    });
+                }
                 if (event.type === 'notification.created' && payload.notification_id) {
                     var page = document.querySelector('.notifications-page');
-                    if (!page || page.getAttribute('data-page') !== '1') return;
-                    fetch('/notifications/' + encodeURIComponent(payload.notification_id) + '/fragment')
-                        .then(function(response) { return response.ok ? response.text() : ''; })
-                        .then(function(html) {
-                            if (!html) return;
-                            var list = page.querySelector('.notifications-list');
-                            if (!list) {
-                                list = document.createElement('div');
-                                list.className = 'notifications-list';
-                                var empty = page.querySelector('.empty-state');
-                                if (empty) empty.replaceWith(list);
-                                else page.appendChild(list);
-                            }
-                            list.insertAdjacentHTML('afterbegin', html);
-                        })
-                        .catch(function() {});
+                    var mobilePage = document.querySelector('.mobile-notifications-page');
+                    if (page && page.getAttribute('data-page') === '1') {
+                        fetch('/notifications/' + encodeURIComponent(payload.notification_id) + '/fragment')
+                            .then(function(response) { return response.ok ? response.text() : ''; })
+                            .then(function(html) {
+                                if (!html) return;
+                                var list = page.querySelector('.notifications-list');
+                                if (!list) {
+                                    list = document.createElement('div');
+                                    list.className = 'notifications-list';
+                                    var empty = page.querySelector('.empty-state');
+                                    if (empty) empty.replaceWith(list);
+                                    else page.appendChild(list);
+                                }
+                                list.insertAdjacentHTML('afterbegin', html);
+                            })
+                            .catch(function() {});
+                    } else if (mobilePage && mobilePage.getAttribute('data-page') === '1') {
+                        fetch('/mobile/notifications/' + encodeURIComponent(payload.notification_id) + '/fragment')
+                            .then(function(response) { return response.ok ? response.text() : ''; })
+                            .then(function(html) {
+                                if (!html) return;
+                                var list = mobilePage.querySelector('.mobile-notifications-list');
+                                if (!list) {
+                                    list = document.createElement('div');
+                                    list.className = 'mobile-notifications-list';
+                                    var empty = mobilePage.querySelector('.empty-state');
+                                    if (empty) empty.replaceWith(list);
+                                    else mobilePage.appendChild(list);
+                                }
+                                list.insertAdjacentHTML('afterbegin', html);
+                            })
+                            .catch(function() {});
+                    }
                 }
             }
         }).connect();
@@ -276,7 +304,7 @@ $(function() {
             .then(function(response) { return response.ok ? response.json() : null; })
             .then(function(data) {
                 if (!data) return;
-                $('.notification-item.unread').removeClass('unread');
+                $('.notification-item.unread, .mobile-notification-item.unread').removeClass('unread');
                 updateUnreadNotificationBadge(data.unread_count);
             })
             .catch(function() {});
@@ -287,25 +315,50 @@ $(function() {
             .then(function(response) { return response.ok ? response.json() : null; })
             .then(function(data) {
                 if (!data) return;
-                $('.notification-item:not(.unread)').remove();
+                $('.notification-item:not(.unread), .mobile-notification-item:not(.unread)').remove();
                 updateUnreadNotificationBadge(data.unread_count);
             })
             .catch(function() {});
     });
 
     $(document).on('click', '.notification-item', function(event) {
-        if ($(event.target).closest('a').length) return;
         var item = this;
+        var link = event.target.closest && event.target.closest('a');
         var id = item.getAttribute('data-notification-id');
         if (!id || !item.classList.contains('unread')) return;
+        if (link) event.preventDefault();
         fetch('/api/notifications/' + encodeURIComponent(id) + '/read', {method: 'POST'})
             .then(function(response) { return response.ok ? response.json() : null; })
             .then(function(data) {
                 if (!data) return;
                 item.classList.remove('unread');
                 updateUnreadNotificationBadge(data.unread_count);
+                if (link) window.location.href = link.href;
             })
-            .catch(function() {});
+            .catch(function() { if (link) window.location.href = link.href; });
+    });
+
+    $(document).on('click', '.mobile-notification-item', function(event) {
+        var item = this;
+        var link = event.target.closest && event.target.closest('a');
+        var destination = link ? link.href : null;
+        event.preventDefault();
+        var navigate = function() { window.location.href = destination; };
+        var id = item.getAttribute('data-notification-id');
+        if (!id || !item.classList.contains('unread')) {
+            if (destination) navigate();
+            return;
+        }
+        fetch('/api/notifications/' + encodeURIComponent(id) + '/read', {method: 'POST'})
+            .then(function(response) { return response.ok ? response.json() : null; })
+            .then(function(data) {
+                if (data) {
+                    item.classList.remove('unread');
+                    updateUnreadNotificationBadge(data.unread_count);
+                }
+                if (destination) navigate();
+            })
+            .catch(function() { if (destination) navigate(); });
     });
 
     $(document).on('click', '.board-notification-toggle', function(e) {

@@ -2,7 +2,13 @@ package kanban
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
+	"unicode"
 
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 	gauth "github.com/jmoiron/giverny/auth"
 	"github.com/jmoiron/monet/db"
 )
@@ -59,9 +65,16 @@ func (s *NotificationService) MarkAllRead(userID int64) error {
 	return err
 }
 
-func (s *NotificationService) DeleteRead(userID int64) error {
+func (s *NotificationService) DeleteRead(userID int64) ([]int64, error) {
+	var ids []int64
+	if err := s.db.Select(&ids, `SELECT id FROM user_notification WHERE user_id=? AND read_at IS NOT NULL`, userID); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return ids, nil
+	}
 	_, err := s.db.Exec(`DELETE FROM user_notification WHERE user_id=? AND read_at IS NOT NULL`, userID)
-	return err
+	return ids, err
 }
 
 func (s *NotificationService) UnreadCount(userID int64) (int, error) {
@@ -111,6 +124,8 @@ func (s *NotificationService) CountForUser(userID int64) (int, error) {
 
 func (s *NotificationService) enrich(notifications *[]UserNotification) {
 	for i := range *notifications {
+		(*notifications)[i].TitleDiff = notificationDiff((*notifications)[i].OldTitle, (*notifications)[i].NewTitle)
+		(*notifications)[i].ContentDiff = notificationDiff((*notifications)[i].OldContent, (*notifications)[i].NewContent)
 		if s.cards != nil && (*notifications)[i].CardID != 0 {
 			(*notifications)[i].Card, _ = s.cards.Get((*notifications)[i].CardID)
 		}
@@ -121,4 +136,119 @@ func (s *NotificationService) enrich(notifications *[]UserNotification) {
 			(*notifications)[i].Actor, _ = s.users.GetByID((*notifications)[i].ActorID)
 		}
 	}
+}
+
+func notificationDiff(oldValue, newValue string) []NotificationDiffLine {
+	if oldValue == newValue {
+		return nil
+	}
+	edits := myers.ComputeEdits(span.URIFromPath("old"), oldValue, newValue)
+	diff := fmt.Sprint(gotextdiff.ToUnified("old", "new", oldValue, edits))
+	lines := strings.Split(strings.TrimSuffix(diff, "\n"), "\n")
+	result := make([]NotificationDiffLine, 0, len(lines))
+	for _, line := range lines {
+		class := "diff-context"
+		switch {
+		case strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
+			class = "diff-file-header"
+		case strings.HasPrefix(line, "@@"):
+			class = "diff-hunk-header"
+		case strings.HasPrefix(line, "-"):
+			class = "diff-removed"
+		case strings.HasPrefix(line, "+"):
+			class = "diff-added"
+		}
+		if class == "diff-removed" || class == "diff-added" {
+			result = append(result, NotificationDiffLine{Class: class, Text: line})
+		}
+	}
+	for i := 0; i < len(result); i++ {
+		if result[i].Class != "diff-removed" {
+			continue
+		}
+		added := i + 1
+		if added >= len(result) || result[added].Class != "diff-added" {
+			continue
+		}
+		oldParts, newParts := inlineDiff(strings.TrimPrefix(result[i].Text, "-"), strings.TrimPrefix(result[added].Text, "+"))
+		result[i].Text, result[i].Prefix, result[i].Parts = "", "-", oldParts
+		result[added].Text, result[added].Prefix, result[added].Parts = "", "+", newParts
+	}
+	return result
+}
+
+func inlineDiff(oldValue, newValue string) ([]NotificationDiffPart, []NotificationDiffPart) {
+	oldTokens, newTokens := diffTokens(oldValue), diffTokens(newValue)
+	if len(oldTokens) > 1000 || len(newTokens) > 1000 {
+		return []NotificationDiffPart{{Class: "diff-inline-removed", Text: oldValue}}, []NotificationDiffPart{{Class: "diff-inline-added", Text: newValue}}
+	}
+
+	width := len(newTokens) + 1
+	dp := make([]int, (len(oldTokens)+1)*width)
+	for i := len(oldTokens) - 1; i >= 0; i-- {
+		for j := len(newTokens) - 1; j >= 0; j-- {
+			if oldTokens[i] == newTokens[j] {
+				dp[i*width+j] = dp[(i+1)*width+j+1] + 1
+			} else if dp[(i+1)*width+j] >= dp[i*width+j+1] {
+				dp[i*width+j] = dp[(i+1)*width+j]
+			} else {
+				dp[i*width+j] = dp[i*width+j+1]
+			}
+		}
+	}
+
+	oldParts := make([]NotificationDiffPart, 0)
+	newParts := make([]NotificationDiffPart, 0)
+	add := func(parts *[]NotificationDiffPart, class, text string) {
+		if text == "" {
+			return
+		}
+		if len(*parts) > 0 && (*parts)[len(*parts)-1].Class == class {
+			(*parts)[len(*parts)-1].Text += text
+			return
+		}
+		*parts = append(*parts, NotificationDiffPart{Class: class, Text: text})
+	}
+	for i, j := 0, 0; i < len(oldTokens) || j < len(newTokens); {
+		switch {
+		case i < len(oldTokens) && j < len(newTokens) && oldTokens[i] == newTokens[j]:
+			add(&oldParts, "diff-inline-context", oldTokens[i])
+			add(&newParts, "diff-inline-context", newTokens[j])
+			i++
+			j++
+		case i < len(oldTokens) && (j == len(newTokens) || dp[(i+1)*width+j] >= dp[i*width+j+1]):
+			add(&oldParts, "diff-inline-removed", oldTokens[i])
+			i++
+		default:
+			add(&newParts, "diff-inline-added", newTokens[j])
+			j++
+		}
+	}
+	return oldParts, newParts
+}
+
+func diffTokens(value string) []string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return nil
+	}
+	tokens := make([]string, 0, len(runes))
+	start := 0
+	category := func(r rune) int {
+		switch {
+		case unicode.IsSpace(r):
+			return 0
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			return 1
+		default:
+			return 2
+		}
+	}
+	for i := 1; i <= len(runes); i++ {
+		if i == len(runes) || category(runes[i]) != category(runes[start]) {
+			tokens = append(tokens, string(runes[start:i]))
+			start = i
+		}
+	}
+	return tokens
 }

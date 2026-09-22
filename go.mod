@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/go-chi/chi/v5 v5.2.2
+	github.com/hexops/gotextdiff v1.0.3
 	github.com/go-webauthn/webauthn v0.17.0
 	github.com/jmoiron/monet v0.0.0-20260324185130-ea52bb7370f3
 	github.com/jmoiron/sqlx v1.2.0

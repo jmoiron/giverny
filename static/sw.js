@@ -1,4 +1,4 @@
-const CACHE = 'giverny-mobile-v30';
+const CACHE = 'giverny-mobile-v40';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',

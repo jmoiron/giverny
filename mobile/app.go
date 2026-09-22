@@ -57,6 +57,7 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("mobile/board.html", templates)
 	reg.AddPathFS("mobile/card.html", templates)
 	reg.AddPathFS("mobile/notifications.html", templates)
+	reg.AddPathFS("mobile/notification_item.html", templates)
 }
 
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
@@ -72,6 +73,7 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/cards/subscribed/", a.handleSubscribedCards)
 		r.Get("/cards/in-progress/", a.handleInProgressCards)
 		r.Get("/notifications/", a.handleNotifications)
+		r.Get("/notifications/{notificationID}/fragment", a.handleNotificationFragment)
 		r.Get("/boards/{slug}/", a.handleBoardDetail)
 		r.Get("/boards/{slug}/columns/{colID}/cards", a.handleColumnCardsPartial)
 		r.Get("/boards/{slug}/cards/{cardID}/", a.handleCardDetail)

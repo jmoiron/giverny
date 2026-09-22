@@ -1,16 +1,33 @@
-<main class="mobile-page mobile-notifications-page">
-    <div class="mobile-list-heading">
+<main class="mobile-page mobile-notifications-page" data-page="{{.page}}">
+    <div class="mobile-list-heading mobile-notifications-heading">
         <h1>notifications</h1>
-        <span>{{len .notifications}}</span>
+        <div class="mobile-notifications-actions">
+            <button type="button" class="notification-action" id="mark-all-notifications-read" title="mark all notifications as read" aria-label="mark all notifications as read"><i class="fa-solid fa-envelope-circle-check"></i></button>
+            <button type="button" class="notification-action danger" id="delete-read-notifications" title="delete all read notifications" aria-label="delete all read notifications"><i class="fa-solid fa-dumpster-fire"></i></button>
+        </div>
     </div>
     {{if .notifications}}
     <div class="mobile-notifications-list">
         {{range .notifications}}
-        <a class="mobile-notification-item" href="{{.URL}}" data-notification-id="{{.ID}}">
-            <i class="fa-solid fa-bell"></i>
-            <span><strong>{{if .Message}}{{.Message}}{{else}}{{.Type.Label}}{{end}}</strong><small>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</small></span>
-        </a>
+        <article class="mobile-notification-item{{if not .ReadAt}} unread{{end}}" data-notification-id="{{.ID}}" data-notification-url="{{.URL}}">
+            <i class="mobile-notification-icon fa-solid {{.Type.Icon}}"></i>
+            <div class="mobile-notification-content">
+                <div class="mobile-notification-description">
+                    {{if .Actor}}<span class="notification-actor">{{if .Actor.ProfileImageURI}}<img class="notification-actor-avatar" src="{{.Actor.ProfileImageURI}}" alt="">{{end}}<span class="notification-actor-name">{{.Actor.Username}}</span></span>{{end}}
+                    <span>{{.Type.Verb}}</span>
+                    {{if .Card}}<span>card <a href="{{.URL}}">{{.Card.Title}}</a>{{if .Board}} on board <a href="/mobile/boards/{{.Board.Slug}}/">{{.Board.Name}}</a>{{end}}</span>{{end}}
+                    <span class="mobile-notification-date">on {{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                </div>
+                {{if .TitleDiff}}
+                <div class="mobile-notification-change"><strong>title</strong><div class="unified-diff">{{range .TitleDiff}}<div class="{{.Class}}">{{if .Parts}}{{.Prefix}}{{range .Parts}}<span class="{{.Class}}">{{.Text}}</span>{{end}}{{else}}{{.Text}}{{end}}</div>{{end}}</div></div>
+                {{end}}
+                {{if .ContentDiff}}
+                <div class="mobile-notification-change">{{if ne .Type.Label "new comment"}}<strong>content</strong>{{end}}{{if .OldContent}}<div class="unified-diff">{{range .ContentDiff}}<div class="{{.Class}}">{{if .Parts}}{{.Prefix}}{{range .Parts}}<span class="{{.Class}}">{{.Text}}</span>{{end}}{{else}}{{.Text}}{{end}}</div>{{end}}</div>{{else}}<div class="notification-new-content">{{.NewContent}}</div>{{end}}</div>
+                {{end}}
+            </div>
+        </article>
         {{end}}
     </div>
     {{else}}<p class="empty-state">no notifications yet</p>{{end}}
+    {{if or .hasPrevious .hasNext}}<nav class="mobile-notifications-pagination" aria-label="notifications pages">{{if .hasPrevious}}<a href="/mobile/notifications/?page={{.previousPage}}">previous</a>{{end}}<span>page {{.page}}</span>{{if .hasNext}}<a href="/mobile/notifications/?page={{.nextPage}}">next</a>{{end}}</nav>{{end}}
 </main>

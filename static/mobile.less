@@ -75,10 +75,25 @@
     .mobile-list-heading span { color: var(--muted); font-size: .9rem; }
     .mobile-card-list { display: grid; gap: .7rem; }
     .mobile-notifications-list { display: grid; gap: .7rem; }
-    .mobile-notification-item { display: flex; align-items: center; gap: .75rem; padding: .85rem; color: var(--text); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 3px 4px 0 rgba(0,0,0,.18); }
-    .mobile-notification-item > i { color: var(--accent); }
-    .mobile-notification-item > span { display: flex; flex-direction: column; gap: .25rem; }
-    .mobile-notification-item small { color: var(--muted); }
+    .mobile-notifications-heading { align-items: center; }
+    .mobile-notifications-heading h1 { margin: 0; }
+    .mobile-notifications-actions { display: flex; align-items: center; gap: .25rem; }
+    .mobile-notifications-actions .notification-action { padding: .45rem; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font: inherit; }
+    .mobile-notifications-actions .notification-action:active { background: var(--hover-bg); color: var(--text); }
+    .mobile-notifications-actions .notification-action.danger:active { color: var(--red); }
+    .mobile-notification-item { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); gap: .65rem; align-items: start; padding: .85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 3px 4px 0 rgba(0,0,0,.18); }
+    .mobile-notification-item.unread { border-left: .25rem solid var(--red); }
+    .mobile-notification-icon { color: var(--text); font-size: 1.05rem; text-align: center; }
+    .mobile-notification-item:not(.unread) .mobile-notification-icon { color: var(--muted); }
+    .mobile-notification-content { min-width: 0; display: grid; gap: .65rem; }
+    .mobile-notification-description { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; line-height: 1.35; }
+    .mobile-notification-description a { color: inherit; }
+    .mobile-notification-date { color: var(--muted); font-size: .85em; }
+    .mobile-notification-change { display: grid; gap: .35rem; }
+    .mobile-notifications-page .notification-actor { display: inline-flex; align-items: center; gap: .35rem; }
+    .mobile-notifications-page .notification-actor-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+    .mobile-notifications-page .notification-actor-name { font-weight: 700; }
+    .mobile-notifications-pagination { display: flex; align-items: center; gap: .8rem; margin-top: 1rem; color: var(--muted); }
     .mobile-list-card { display: block; padding: .85rem; color: var(--text); text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
     .mobile-list-card:active { background: var(--hover-bg); }
     .mobile-list-card-title { display: flex; align-items: flex-start; gap: .55rem; line-height: 1.25; }

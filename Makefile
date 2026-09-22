@@ -26,7 +26,7 @@ css:
 	$(MAKE) -C static
 
 fmt:
-	goimports -w $(shell git ls-files '*.go')
+	goimports -w $(shell find . -type f -name '*.go' -not -path './.git/*' -print)
 
 run:
 	reflex -g '*.go' -s -- sh -c "go build --tags=fts5 -o giverny . && ./giverny --config=dev.cfg.json --debug"

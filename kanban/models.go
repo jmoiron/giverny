@@ -97,22 +97,36 @@ func (t NotificationType) Icon() string {
 }
 
 type UserNotification struct {
-	ID         int64            `db:"id"`
-	ActorID    int64            `db:"actor_id"`
-	BoardID    int64            `db:"board_id"`
-	CardID     int64            `db:"card_id"`
-	Type       NotificationType `db:"notification_type"`
-	Message    string           `db:"message"`
-	URL        string           `db:"url"`
-	CreatedAt  time.Time        `db:"created_at"`
-	ReadAt     *time.Time       `db:"read_at"`
-	OldTitle   string           `db:"old_title"`
-	NewTitle   string           `db:"new_title"`
-	OldContent string           `db:"old_content"`
-	NewContent string           `db:"new_content"`
-	Card       *Card            `db:"-"`
-	Board      *Board           `db:"-"`
-	Actor      *gauth.User      `db:"-"`
+	ID          int64                  `db:"id"`
+	ActorID     int64                  `db:"actor_id"`
+	BoardID     int64                  `db:"board_id"`
+	CardID      int64                  `db:"card_id"`
+	Type        NotificationType       `db:"notification_type"`
+	Message     string                 `db:"message"`
+	URL         string                 `db:"url"`
+	CreatedAt   time.Time              `db:"created_at"`
+	ReadAt      *time.Time             `db:"read_at"`
+	OldTitle    string                 `db:"old_title"`
+	NewTitle    string                 `db:"new_title"`
+	OldContent  string                 `db:"old_content"`
+	NewContent  string                 `db:"new_content"`
+	Card        *Card                  `db:"-"`
+	Board       *Board                 `db:"-"`
+	Actor       *gauth.User            `db:"-"`
+	TitleDiff   []NotificationDiffLine `db:"-"`
+	ContentDiff []NotificationDiffLine `db:"-"`
+}
+
+type NotificationDiffLine struct {
+	Class  string
+	Text   string
+	Prefix string
+	Parts  []NotificationDiffPart
+}
+
+type NotificationDiffPart struct {
+	Class string
+	Text  string
 }
 
 // Board visibility levels.
