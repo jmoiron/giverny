@@ -1,12 +1,14 @@
 <div class="board-outer" id="board-outer" data-slug="{{.board.Slug}}">
     <div class="board-header">
         <h2>{{.board.Name}}</h2>
-        <span class="visibility-badge">{{.board.Visibility}}</span>
-        {{if .notificationsEnabled}}
-        <button type="button" class="board-notification-toggle{{if .boardNotifications}} is-enabled{{end}}" data-board-slug="{{.board.Slug}}" data-enabled="{{if .boardNotifications}}1{{else}}0{{end}}" title="toggle board notifications" aria-label="toggle board notifications">
-            <i class="fa-solid {{if .boardNotifications}}fa-bell{{else}}fa-bell-slash{{end}}"></i>
-        </button>
-        {{end}}
+        <div class="board-header-meta">
+            <span class="visibility-badge">{{.board.Visibility}}</span>
+            {{if .notificationsEnabled}}
+            <button type="button" class="board-notification-toggle{{if .boardNotifications}} is-enabled{{end}}" data-board-slug="{{.board.Slug}}" data-enabled="{{if .boardNotifications}}1{{else}}0{{end}}" title="toggle board notifications" aria-label="toggle board notifications">
+                <i class="fa-solid {{if .boardNotifications}}fa-bell{{else}}fa-bell-slash{{end}}"></i>
+            </button>
+            {{end}}
+        </div>
         {{if .board.Description}}<span class="board-desc">{{.board.Description}}</span>{{end}}
     </div>
     {{if .canEdit}}

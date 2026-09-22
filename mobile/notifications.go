@@ -10,7 +10,7 @@ import (
 
 func (a *App) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	user := gauth.UserFromContext(r.Context())
-	notifications, err := a.gauth.Users().RecentNotifications(user.ID, 50)
+	notifications, err := a.kanban.Notifications().RecentForUser(user.ID, 50)
 	if err != nil {
 		app.Http500("loading mobile notifications", w, err)
 		return

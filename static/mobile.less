@@ -150,7 +150,7 @@
     .mobile-drag-edge.active { opacity: .9; }
     .mobile-drag-edge-left { left: .25rem; border-left: 2px dashed var(--accent); }
     .mobile-drag-edge-right { right: .25rem; border-right: 2px dashed var(--accent); }
-    .mobile-col-pager { display: flex; justify-content: center; gap: .35rem; }
+    .mobile-col-pager { position: fixed; z-index: 10; left: 50%; bottom: calc(.7rem + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; justify-content: center; gap: .35rem; padding: .35rem .5rem; border-radius: 1rem; background: color-mix(in srgb, var(--surface) 88%, transparent); }
     .mobile-col-pager span { width: .45rem; height: .45rem; border-radius: 50%; background: var(--muted); opacity: .45; }
     .mobile-col-pager span.active { opacity: 1; background: var(--accent); }
     .mobile-card-page { padding-top: .5rem; }

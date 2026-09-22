@@ -66,12 +66,12 @@ func (a *App) Migrate() error {
 	return nil
 }
 
+
 func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("auth/login.html", templates)
 	reg.AddPathFS("auth/invite.html", templates)
 	reg.AddPathFS("auth/users.html", templates)
 	reg.AddPathFS("auth/settings.html", templates)
-	reg.AddPathFS("auth/notifications.html", templates)
 }
 
 func (a *App) Bind(r chi.Router) {
@@ -91,10 +91,6 @@ func (a *App) Bind(r chi.Router) {
 		r.Get("/", a.handleUserSettings)
 		r.Post("/", a.handleUserSettingsSave)
 		r.Post("/avatar-upload", a.handleAvatarUpload)
-	})
-	r.Route("/notifications", func(r chi.Router) {
-		r.Use(RequireAuth)
-		r.Get("/", a.handleNotifications)
 	})
 	r.Get("/auth/notifications/enabled", func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())

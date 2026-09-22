@@ -141,13 +141,19 @@ var NotificationMigrations = monarch.Set{
 		Up: `CREATE TABLE IF NOT EXISTS user_notification (
 			id INTEGER NOT NULL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
-			message TEXT NOT NULL,
+			message TEXT NOT NULL DEFAULT '',
 			url TEXT NOT NULL,
 			created_at DATETIME DEFAULT (datetime('now'))
 		);`,
 		Down: `DROP TABLE user_notification;`,
 	}, {
 		Up: `ALTER TABLE notification_setting ADD COLUMN card_comment BOOLEAN NOT NULL DEFAULT 1;`,
+		Down: `SELECT 1;`,
+	}, {
+		Up: `ALTER TABLE user_notification ADD COLUMN actor_id INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE user_notification ADD COLUMN board_id INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE user_notification ADD COLUMN card_id INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE user_notification ADD COLUMN notification_type TEXT NOT NULL DEFAULT 'legacy';`,
 		Down: `SELECT 1;`,
 	}},
 }

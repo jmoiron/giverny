@@ -402,15 +402,23 @@
         });
         var columns = document.querySelector('.mobile-board-columns');
         var dots = document.querySelectorAll('.mobile-col-pager span');
-        if (columns && dots.length) columns.addEventListener('scroll', function () {
-            var index = columns.clientWidth ? Math.round(columns.scrollLeft / columns.clientWidth) : 0;
-            dots.forEach(function (dot, i) { dot.classList.toggle('active', i === index); });
-        }, {passive: true});
+        var boardPage = document.querySelector('.mobile-board-page');
+        if (columns && boardPage) {
+            var boardScrollKey = 'mobile-board-scroll:' + boardPage.getAttribute('data-board-slug');
+            var savedScroll = sessionStorage.getItem(boardScrollKey);
+            if (savedScroll !== null) {
+                requestAnimationFrame(function () { columns.scrollLeft = parseInt(savedScroll, 10) || 0; });
+            }
+            columns.addEventListener('scroll', function () {
+                sessionStorage.setItem(boardScrollKey, String(columns.scrollLeft));
+                var index = columns.clientWidth ? Math.round(columns.scrollLeft / columns.clientWidth) : 0;
+                dots.forEach(function (dot, i) { dot.classList.toggle('active', i === index); });
+            }, {passive: true});
+        }
         var close = document.getElementById('card-modal-close');
         if (close && document.querySelector('.mobile-card-page')) close.addEventListener('click', function (event) {
             event.preventDefault(); history.back();
         });
-        var boardPage = document.querySelector('.mobile-board-page');
         if (boardPage) {
             boardPage.addEventListener('click', function (event) {
                 var card = event.target.closest('.kanban-card');

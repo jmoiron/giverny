@@ -47,6 +47,7 @@ type App struct {
 	comments     *CommentService
 	users        *gauth.UserProfileService
 	views        *ViewService
+	notifications *NotificationService
 	fss          vfs.Registry
 	pushNotifier PushNotifier
 }
@@ -72,6 +73,7 @@ func NewApp(dbh db.DB, fss vfs.Registry) *App {
 		comments: NewCommentService(dbh),
 		users:    gauth.NewUserProfileService(dbh),
 		views:    NewViewService(dbh),
+		notifications: NewNotificationService(dbh),
 		fss:      fss,
 	}
 }
@@ -97,6 +99,7 @@ func (a *App) Name() string { return "kanban" }
 func (a *App) Boards() *BoardService          { return a.boards }
 func (a *App) Cards() *CardService            { return a.cards }
 func (a *App) Columns() *ColumnService        { return a.columns }
+func (a *App) Notifications() *NotificationService { return a.notifications }
 func (a *App) SetPushNotifier(n PushNotifier) { a.pushNotifier = n }
 
 func (a *App) CanViewBoard(board *Board, user *gauth.User) bool {
@@ -269,6 +272,7 @@ func (a *App) Migrate() error {
 		CardFTSMigrations,
 		CommentFTSMigrations,
 		CardViewMigrations,
+		NotificationMigrations,
 	}
 	for _, s := range sets {
 		if err := m.Upgrade(s); err != nil {
@@ -288,11 +292,27 @@ func (a *App) Register(reg *mtr.Registry) {
 	reg.AddPathFS("kanban/labels.html", templates)
 	reg.AddPathFS("kanban/card_list.html", templates)
 	reg.AddPathFS("kanban/view_list.html", templates)
+	reg.AddPathFS("kanban/notifications.html", templates)
 }
 
 func (a *App) GetAdmin() (app.Admin, error) { return nil, nil }
 
 func (a *App) Bind(r chi.Router) {
+	r.Route("/notifications", func(r chi.Router) {
+		r.Use(gauth.RequireAuth)
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		user := gauth.UserFromContext(r.Context())
+		notifications, err := a.notifications.RecentForUser(user.ID, 50)
+		if err != nil {
+			app.Http500("loading notifications", w, err)
+			return
+		}
+		if err := mtr.RegistryFromContext(r.Context()).RenderWithBase(w, "base", "kanban/notifications.html", mtr.Ctx{"title": "notifications", "user": user, "notifications": notifications}); err != nil {
+			app.Http500("rendering notifications", w, err)
+		}
+	})
+	})
+
 	r.Route("/api", func(r chi.Router) {
 		r.Use(gauth.RequireAuth)
 		r.Get("/nav-boards/", a.handleNavBoards)
@@ -1227,7 +1247,7 @@ func (a *App) handleBoardList(w http.ResponseWriter, r *http.Request) {
 	}
 	boardNotifications := make(map[int64]bool, len(boards))
 	for _, board := range boards {
-		boardNotifications[board.ID], err = a.users.BoardNotificationsEnabled(user.ID, board.ID)
+		boardNotifications[board.ID], err = a.notifications.BoardEnabled(user.ID, board.ID)
 		if err != nil {
 			app.Http500("loading board notification settings", w, err)
 			return
@@ -1254,7 +1274,7 @@ func (a *App) handleBoardNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enabled := r.FormValue("enabled") == "1"
-	if err := a.users.SetBoardNotifications(user.ID, board.ID, enabled); err != nil {
+	if err := a.notifications.SetBoardEnabled(user.ID, board.ID, enabled); err != nil {
 		apiErr(w, http.StatusInternalServerError, "could not save board notifications")
 		return
 	}
@@ -1403,7 +1423,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("loading notification settings", w, err)
 		return
 	}
-	boardNotifications, err := a.users.BoardNotificationsEnabled(user.ID, board.ID)
+	boardNotifications, err := a.notifications.BoardEnabled(user.ID, board.ID)
 	if err != nil {
 		app.Http500("loading board notification settings", w, err)
 		return

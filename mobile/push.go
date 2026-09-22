@@ -242,14 +242,14 @@ func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, a
 		if action != "" && !notificationActionEnabled(settings, action) {
 			continue
 		}
-		enabled, err := users.BoardNotificationsEnabled(userID, board.ID)
+		enabled, err := p.kanban.Notifications().BoardEnabled(userID, board.ID)
 		if err != nil || !enabled {
 			continue
 		}
 		if settings.DeliveryMode == gauth.NotificationPush || settings.DeliveryMode == gauth.NotificationPushEmail {
 			pushRecipients = append(pushRecipients, userID)
 		}
-		_ = users.CreateNotification(userID, message+": "+card.Title, notificationURL)
+		_ = p.kanban.Notifications().Create(userID, actorID, board.ID, card.ID, notificationTypeForAction(action), notificationURL)
 	}
 	if len(pushRecipients) == 0 {
 		return
@@ -271,6 +271,23 @@ func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, a
 				_, _ = p.db.Exec(`UPDATE push_subscription SET last_used_at=datetime('now') WHERE id=?`, stored.ID)
 			}
 		}
+	}
+}
+
+func notificationTypeForAction(action string) kanban.NotificationType {
+	switch action {
+	case gauth.NotificationCardAssigned:
+		return kanban.NotificationTypeNewAssignment
+	case gauth.NotificationCardComment:
+		return kanban.NotificationTypeNewComment
+	case gauth.NotificationNewCard:
+		return kanban.NotificationTypeNewCard
+	case gauth.NotificationCardClosed:
+		return kanban.NotificationTypeCardClosed
+	case gauth.NotificationCardUpdated:
+		return kanban.NotificationTypeCardUpdated
+	default:
+		return kanban.NotificationType(action)
 	}
 }
 

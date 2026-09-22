@@ -141,7 +141,7 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	boardNotifications := make(map[int64]bool, len(boards))
 	for _, board := range boards {
-		boardNotifications[board.ID], err = a.gauth.Users().BoardNotificationsEnabled(user.ID, board.ID)
+		boardNotifications[board.ID], err = a.kanban.Notifications().BoardEnabled(user.ID, board.ID)
 		if err != nil {
 			app.Http500("loading board notification settings", w, err)
 			return
@@ -172,7 +172,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("loading notification settings", w, err)
 		return
 	}
-	boardNotifications, err := a.gauth.Users().BoardNotificationsEnabled(user.ID, board.ID)
+	boardNotifications, err := a.kanban.Notifications().BoardEnabled(user.ID, board.ID)
 	if err != nil {
 		app.Http500("loading board notification settings", w, err)
 		return

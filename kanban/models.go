@@ -7,6 +7,67 @@ import (
 	"github.com/jmoiron/monet/db/monarch"
 )
 
+var NotificationMigrations = monarch.Set{
+	Name: "kanban_notification",
+	Migrations: []monarch.Migration{{
+		Up: `CREATE TABLE IF NOT EXISTS notification_board_mute (
+			user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+			board_id INTEGER NOT NULL REFERENCES board(id) ON DELETE CASCADE,
+			PRIMARY KEY (user_id, board_id)
+		);
+		CREATE TABLE IF NOT EXISTS user_notification (
+			id INTEGER NOT NULL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+			message TEXT NOT NULL DEFAULT '',
+			url TEXT NOT NULL,
+			created_at DATETIME DEFAULT (datetime('now')),
+			actor_id INTEGER NOT NULL DEFAULT 0,
+			board_id INTEGER NOT NULL DEFAULT 0,
+			card_id INTEGER NOT NULL DEFAULT 0,
+			notification_type TEXT NOT NULL DEFAULT 'legacy'
+		);`,
+		Down: `DROP TABLE user_notification;`,
+	}},
+}
+
+type NotificationType string
+
+const (
+	NotificationTypeNewAssignment NotificationType = "new_assignment"
+	NotificationTypeNewComment    NotificationType = "new_comment"
+	NotificationTypeNewCard       NotificationType = "new_card"
+	NotificationTypeCardClosed    NotificationType = "card_closed"
+	NotificationTypeCardUpdated   NotificationType = "card_updated"
+)
+
+func (t NotificationType) Label() string {
+	switch t {
+	case NotificationTypeNewAssignment:
+		return "new assignment"
+	case NotificationTypeNewComment:
+		return "new comment"
+	case NotificationTypeNewCard:
+		return "new card"
+	case NotificationTypeCardClosed:
+		return "card closed"
+	case NotificationTypeCardUpdated:
+		return "card updated"
+	default:
+		return string(t)
+	}
+}
+
+type UserNotification struct {
+	ID        int64            `db:"id"`
+	ActorID   int64            `db:"actor_id"`
+	BoardID   int64            `db:"board_id"`
+	CardID    int64            `db:"card_id"`
+	Type      NotificationType `db:"notification_type"`
+	Message   string           `db:"message"`
+	URL       string           `db:"url"`
+	CreatedAt time.Time        `db:"created_at"`
+}
+
 // Board visibility levels.
 const (
 	VisibilityPrivate = "private" // admin/superadmin only
