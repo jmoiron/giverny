@@ -174,7 +174,31 @@
     .mobile-board-columns { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: .8rem 0 1rem; }
     .mobile-board-column-page { position: relative; flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 0 .4rem; }
     .mobile-board-column { position: relative; width: 100%; min-width: 0; min-height: 60vh; padding: .8rem; background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%); border: 1px solid var(--border); border-radius: 8px; box-shadow: 3px 4px 0px rgba(0,0,0,0.18); }
-    .mobile-board-column h2 { margin-top: 0; }
+    .mobile-column-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .mobile-column-header h2 { min-width: 0; margin: 0; }
+    .mobile-column-actions { position: relative; display: flex; align-items: center; gap: .15rem; flex-shrink: 0; }
+    .mobile-column-actions button { width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 1rem; }
+    .mobile-column-actions button:active { background: var(--hover-bg); color: var(--text); }
+    .mobile-column-menu { position: absolute; z-index: 8; top: 2.1rem; right: 0; display: grid; min-width: 7rem; padding: .25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+    .mobile-column-menu[hidden], .mobile-add-card-form[hidden], .mobile-column-edit-modal[hidden] { display: none; }
+    .mobile-column-menu button { width: auto; height: auto; padding: .55rem .65rem; text-align: left; font: inherit; color: var(--text); }
+    .mobile-column-menu button.danger-btn { color: var(--red); }
+    .mobile-add-card-form { display: grid; gap: .5rem; margin: .65rem 0; }
+    .mobile-add-card-form input, .mobile-column-edit-card input { width: 100%; min-width: 0; padding: .65rem .7rem; border: 1px solid var(--border); border-radius: 5px; background: var(--input-bg); color: var(--text); font: inherit; }
+    .mobile-add-card-form .btn-row { justify-content: flex-end; }
+    .mobile-column-edit-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgba(0,0,0,.4); }
+    .mobile-column-edit-card { width: min(100%, 24rem); padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .mobile-column-edit-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .mobile-column-edit-heading h2 { margin: 0; }
+    .mobile-column-edit-close { border: 0; background: transparent; color: var(--muted); font-size: 1.1rem; }
+    .mobile-column-edit-card form { display: grid; gap: .8rem; margin-top: 1rem; }
+    .mobile-column-edit-card label { display: grid; gap: .3rem; color: var(--muted); font-size: .9rem; }
+    .mobile-column-settings { display: grid; gap: .45rem; }
+    .mobile-column-settings-label { color: var(--muted); font-size: .9rem; }
+    .mobile-column-settings .column-setting-row { display: flex; grid-template-columns: none; align-items: center; gap: .5rem; }
+    .mobile-column-settings .column-setting-row input { width: auto; }
+    .mobile-column-settings .column-setting-note { color: var(--muted); font-size: .8rem; }
+    .mobile-column-edit-card .btn-row { justify-content: flex-end; }
     .mobile-board-column .col-cards { min-width: 0; }
     .mobile-board-column .kanban-card { margin: .6rem 0; touch-action: pan-x pan-y; }
     .mobile-board-column .kanban-card.dragging-source { opacity: .35; }

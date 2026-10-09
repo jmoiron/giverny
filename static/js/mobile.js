@@ -421,11 +421,108 @@
         });
         if (boardPage) {
             boardPage.addEventListener('click', function (event) {
+                if (event.target.closest('.mobile-column-actions, .mobile-add-card-form, .mobile-column-edit-modal')) return;
                 var card = event.target.closest('.kanban-card');
                 if (card && !event.defaultPrevented && Date.now() >= (boardPage._suppressClickUntil || 0)) window.location.href = '/mobile/boards/' + encodeURIComponent(boardPage.getAttribute('data-board-slug')) + '/cards/' + card.getAttribute('data-id') + '/';
             });
             setupNativeReorder(boardPage);
             setupTouchReorder(boardPage);
+        }
+        if (boardPage) {
+            var boardSlug = boardPage.getAttribute('data-board-slug');
+            var editModal = document.getElementById('mobile-column-edit-modal');
+            var editForm = document.getElementById('mobile-column-edit-form');
+            function closeColumnMenus() {
+                boardPage.querySelectorAll('.mobile-column-menu').forEach(function (menu) { menu.hidden = true; });
+            }
+            boardPage.addEventListener('click', function (event) {
+                var menuButton = event.target.closest('.mobile-column-menu-button');
+                if (menuButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var menu = menuButton.parentElement.querySelector('.mobile-column-menu');
+                    var wasHidden = menu.hidden;
+                    closeColumnMenus();
+                    menu.hidden = !wasHidden;
+                    return;
+                }
+                if (event.target.closest('.mobile-column-menu')) return;
+                if (!event.target.closest('.mobile-column-actions')) closeColumnMenus();
+            });
+            boardPage.querySelectorAll('.mobile-add-card-button').forEach(function (button) {
+                button.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var column = button.closest('.mobile-board-column');
+                    var form = column && column.querySelector('.mobile-add-card-form');
+                    if (!form) return;
+                    form.hidden = false;
+                    button.hidden = true;
+                    var input = form.querySelector('input[name=title]');
+                    if (input) input.focus();
+                });
+            });
+            boardPage.querySelectorAll('.mobile-add-card-cancel').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    var form = button.closest('.mobile-add-card-form');
+                    form.reset();
+                    form.hidden = true;
+                    form.closest('.mobile-board-column').querySelector('.mobile-add-card-button').hidden = false;
+                });
+            });
+            boardPage.querySelectorAll('.mobile-add-card-form').forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    var columnID = form.getAttribute('data-column-id');
+                    fetch('/boards/' + encodeURIComponent(boardSlug) + '/columns/' + encodeURIComponent(columnID) + '/cards', {method: 'POST', body: new URLSearchParams(new FormData(form))})
+                        .then(function (response) { if (!response.ok) throw new Error('could not create card'); return fetch('/mobile/boards/' + encodeURIComponent(boardSlug) + '/columns/' + encodeURIComponent(columnID) + '/cards'); })
+                        .then(function (response) { return response.text(); })
+                        .then(function (html) {
+                            var cards = form.closest('.mobile-board-column').querySelector('.col-cards');
+                            cards.innerHTML = html;
+                            form.reset();
+                            form.hidden = true;
+                            form.closest('.mobile-board-column').querySelector('.mobile-add-card-button').hidden = false;
+                        })
+                        .catch(function () {});
+                });
+            });
+            if (editModal && editForm) {
+                boardPage.querySelectorAll('.mobile-column-edit').forEach(function (button) {
+                    button.addEventListener('click', function () {
+                        closeColumnMenus();
+                        editForm.action = '/boards/' + encodeURIComponent(boardSlug) + '/columns/' + encodeURIComponent(button.getAttribute('data-column-id')) + '/edit';
+                        editForm.elements.name.value = button.getAttribute('data-name') || '';
+                        editForm.elements.wip_limit.value = button.getAttribute('data-wip') || '0';
+                        editForm.elements.color.value = button.getAttribute('data-color') || '';
+                        var isDone = button.getAttribute('data-done') === '1';
+                        var lateInput = document.getElementById('mobile-column-late-input');
+                        var doneInput = document.getElementById('mobile-column-done-input');
+                        lateInput.checked = button.getAttribute('data-late') === '1';
+                        doneInput.checked = isDone;
+                        doneInput.disabled = isDone;
+                        document.getElementById('mobile-column-done-note').hidden = !isDone;
+                        editModal.hidden = false;
+                        editForm.elements.name.focus();
+                    });
+                });
+                editModal.querySelectorAll('.mobile-column-edit-close').forEach(function (button) { button.addEventListener('click', function () { editModal.hidden = true; }); });
+                editForm.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    editForm.elements.done.value = document.getElementById('mobile-column-done-input').checked ? '1' : '0';
+                    editForm.elements.late.value = document.getElementById('mobile-column-late-input').checked ? '1' : '0';
+                    fetch(editForm.action, {method: 'POST', body: new URLSearchParams(new FormData(editForm))}).then(function (response) { if (!response.ok) throw new Error('could not edit column'); window.location.reload(); }).catch(function () {});
+                });
+                editModal.addEventListener('click', function (event) { if (event.target === editModal) editModal.hidden = true; });
+            }
+            boardPage.querySelectorAll('.mobile-column-delete').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    closeColumnMenus();
+                    var action = function () { fetch('/boards/' + encodeURIComponent(boardSlug) + '/columns/' + encodeURIComponent(button.getAttribute('data-column-id')) + '/delete', {method: 'POST'}).then(function (response) { if (!response.ok) throw new Error('could not delete column'); window.location.reload(); }).catch(function () {}); };
+                    if (window.showConfirmModal) window.showConfirmModal('Delete column “' + (button.getAttribute('data-column-name') || '') + '”? Cards in this column will also be deleted.', action);
+                    else if (window.confirm('Delete this column? Cards in this column will also be deleted.')) action();
+                });
+            });
         }
         if (boardPage && window.createBoardSocket) {
             var slug = boardPage.getAttribute('data-board-slug');

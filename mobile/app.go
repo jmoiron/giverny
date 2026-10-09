@@ -179,7 +179,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		app.Http500("loading board notification settings", w, err)
 		return
 	}
-	a.render(w, r, "mobile/board.html", mtr.Ctx{"title": board.Name, "user": user, "board": board, "columns": columns, "canEdit": canEdit, "notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled, "boardNotifications": boardNotifications})
+	a.render(w, r, "mobile/board.html", mtr.Ctx{"title": board.Name, "user": user, "board": board, "columns": columns, "canEdit": canEdit, "isAdmin": user.IsAdmin(), "notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled, "boardNotifications": boardNotifications})
 }
 
 func (a *App) handleColumnCardsPartial(w http.ResponseWriter, r *http.Request) {

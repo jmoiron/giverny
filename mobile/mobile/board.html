@@ -4,7 +4,27 @@
         {{range .columns}}
         <div class="mobile-board-column-page">
         <section class="mobile-board-column" data-column-id="{{.ID}}">
-            <h2>{{.Name}}{{if .WIPLimit}} <small>{{.WIPLimit}}</small>{{end}}</h2>
+            <div class="mobile-column-header">
+                <h2>{{.Name}}{{if .WIPLimit}} <small>{{.WIPLimit}}</small>{{end}}</h2>
+                {{if $.canEdit}}
+                <div class="mobile-column-actions">
+                    <button type="button" class="mobile-add-card-button" data-column-id="{{.ID}}" title="add card" aria-label="add card"><i class="fa-solid fa-plus"></i></button>
+                    {{if $.isAdmin}}
+                    <button type="button" class="mobile-column-menu-button" data-column-id="{{.ID}}" title="column menu" aria-label="column menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                    <div class="mobile-column-menu" data-column-id="{{.ID}}" hidden>
+                        <button type="button" class="mobile-column-edit" data-column-id="{{.ID}}" data-name="{{.Name}}" data-wip="{{.WIPLimit}}" data-color="{{.Color}}" data-done="{{if .Done}}1{{else}}0{{end}}" data-late="{{if .Late}}1{{else}}0{{end}}">edit</button>
+                        <button type="button" class="mobile-column-delete danger-btn" data-column-id="{{.ID}}" data-column-name="{{.Name}}">delete</button>
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+            {{if $.canEdit}}
+            <form class="mobile-add-card-form" data-column-id="{{.ID}}" hidden>
+                <input type="text" name="title" placeholder="card title" required>
+                <div class="btn-row"><button type="button" class="btn btn-cancel mobile-add-card-cancel">cancel</button><button type="submit" class="btn">add</button></div>
+            </form>
+            {{end}}
             <div class="col-cards" data-column-id="{{.ID}}">
                 {{range .Cards}}{{.HTML}}{{end}}
             </div>
@@ -15,4 +35,25 @@
     <div class="mobile-col-pager" aria-label="columns">
         {{range $i, $column := .columns}}<span class="{{if eq $i 0}}active{{end}}"></span>{{end}}
     </div>
+    {{if .isAdmin}}
+    <div class="mobile-column-edit-modal" id="mobile-column-edit-modal" hidden>
+        <div class="mobile-column-edit-card">
+            <div class="mobile-column-edit-heading"><h2>edit column</h2><button type="button" class="mobile-column-edit-close" aria-label="close"><i class="fa-solid fa-xmark"></i></button></div>
+            <form id="mobile-column-edit-form" method="post">
+                <label>name<input type="text" name="name" required></label>
+                <input type="hidden" name="wip_limit">
+                <input type="hidden" name="color">
+                <div class="mobile-column-settings">
+                    <span class="mobile-column-settings-label">settings</span>
+                    <label class="column-setting-row"><input type="checkbox" id="mobile-column-late-input" value="1"><span>late column</span></label>
+                    <label class="column-setting-row"><input type="checkbox" id="mobile-column-done-input" value="1"><span>done column</span></label>
+                    <div class="column-setting-note" id="mobile-column-done-note" hidden>every board must have a done column</div>
+                    <input type="hidden" name="done" value="0">
+                    <input type="hidden" name="late" value="0">
+                </div>
+                <div class="btn-row"><button type="button" class="btn btn-cancel mobile-column-edit-close">cancel</button><button type="submit" class="btn">save</button></div>
+            </form>
+        </div>
+    </div>
+    {{end}}
 </main>
