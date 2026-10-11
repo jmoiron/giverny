@@ -559,7 +559,7 @@ func addUser(username string, users *gauth.UserProfileService) error {
 }
 
 func addGravatars(users *gauth.UserProfileService) error {
-	all, err := users.List()
+	all, err := users.ListAll()
 	if err != nil {
 		return err
 	}

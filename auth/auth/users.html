@@ -6,6 +6,7 @@
                 <th>username</th>
                 <th>email</th>
                 <th>role</th>
+                <th>test user</th>
                 <th>created</th>
                 <th>last login</th>
                 <th></th>
@@ -25,6 +26,12 @@
                         </select>
                     </form>
                 </td>
+                <td>
+                    <form id="test-{{.ID}}" method="post" action="/admin/users/{{.ID}}/role">
+                        <input type="hidden" name="role" value="{{.Role}}">
+                        <input type="checkbox" name="is_test_user" value="1"{{if .IsTestUser}} checked{{end}}>
+                    </form>
+                </td>
                 <td>{{.CreatedAt.Format "2006-01-02"}}</td>
                 <td>{{if .LastLoginAt}}{{.LastLoginAt.Format "2006-01-02"}}{{else}}never{{end}}</td>
                 <td>
@@ -32,6 +39,8 @@
                         <form id="delete-{{.ID}}" method="post" action="/admin/users/{{.ID}}/delete"></form>
                         <i class="fa-solid fa-floppy-disk action-icon save-icon"
                            data-submit="role-{{.ID}}" title="save role"></i>
+                        <i class="fa-solid fa-floppy-disk action-icon save-icon"
+                           data-submit="test-{{.ID}}" title="save test user flag"></i>
                         {{if and (not .IsSuperAdmin) (ne .ID $.user.ID)}}
                         <i class="fa-solid fa-circle-xmark action-icon delete-icon"
                            data-submit="delete-{{.ID}}"

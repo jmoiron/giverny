@@ -24,6 +24,7 @@ type UserProfile struct {
 	Timezone             string     `db:"timezone"`
 	AutoAssignCards      bool       `db:"auto_assign_cards"`
 	DisablePasskeyPrompt bool       `db:"disable_passkey_prompt"`
+	IsTestUser           bool       `db:"is_test_user"`
 	CreatedAt            time.Time  `db:"created_at"`
 	LastLoginAt          *time.Time `db:"last_login_at"`
 }
@@ -66,6 +67,10 @@ var UserProfileMigrations = monarch.Set{
 		},
 		{
 			Up:   `ALTER TABLE user_profile ADD COLUMN disable_passkey_prompt BOOLEAN NOT NULL DEFAULT 0;`,
+			Down: `SELECT 1;`,
+		},
+		{
+			Up:   `ALTER TABLE user_profile ADD COLUMN is_test_user BOOLEAN NOT NULL DEFAULT 0;`,
 			Down: `SELECT 1;`,
 		},
 	},

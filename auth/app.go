@@ -205,7 +205,7 @@ func (a *App) handleUserList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) renderUserList(w http.ResponseWriter, r *http.Request, inviteLink string) {
-	users, err := a.users.List()
+	users, err := a.users.ListAll()
 	if err != nil {
 		app.Http500("listing users", w, err)
 		return
@@ -262,6 +262,10 @@ func (a *App) handleSetRole(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.users.SetRole(userID, role); err != nil {
 		app.Http500("setting role", w, err)
+		return
+	}
+	if err := a.users.SetTestUser(userID, r.FormValue("is_test_user") == "1"); err != nil {
+		app.Http500("setting test user flag", w, err)
 		return
 	}
 	http.Redirect(w, r, "/admin/users/", http.StatusSeeOther)

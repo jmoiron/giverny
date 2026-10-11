@@ -23,6 +23,7 @@ type User struct {
 	Timezone             string     `db:"timezone"`
 	AutoAssignCards      bool       `db:"auto_assign_cards"`
 	DisablePasskeyPrompt bool       `db:"disable_passkey_prompt"`
+	IsTestUser           bool       `db:"is_test_user"`
 	CreatedAt            time.Time  `db:"created_at"`
 	LastLoginAt          *time.Time `db:"last_login_at"`
 }
@@ -81,7 +82,7 @@ func (s *UserProfileService) CreateUser(username, email, password, role, profile
 	})
 }
 
-const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.timezone, p.auto_assign_cards, p.disable_passkey_prompt, p.created_at, p.last_login_at
+const userProfileSelect = `SELECT u.id, u.username, p.email, p.role, p.profile_image_uri, p.timezone, p.auto_assign_cards, p.disable_passkey_prompt, p.is_test_user, p.created_at, p.last_login_at
 	FROM user u JOIN user_profile p ON p.user_id = u.id`
 
 func (s *UserProfileService) GetByUsername(username string) (*User, error) {
@@ -103,8 +104,21 @@ func (s *UserProfileService) GetByID(id int64) (*User, error) {
 }
 
 func (s *UserProfileService) List() ([]*User, error) {
+	return s.list(false)
+}
+
+// ListAll includes test users for administrative and maintenance operations.
+func (s *UserProfileService) ListAll() ([]*User, error) {
+	return s.list(true)
+}
+
+func (s *UserProfileService) list(includeTestUsers bool) ([]*User, error) {
 	var users []*User
-	err := s.db.Select(&users, userProfileSelect+` ORDER BY u.username`)
+	query := userProfileSelect
+	if !includeTestUsers {
+		query += ` WHERE p.is_test_user=0`
+	}
+	err := s.db.Select(&users, query+` ORDER BY u.username`)
 	return users, err
 }
 
@@ -120,6 +134,11 @@ func (s *UserProfileService) DeleteUser(userID int64) error {
 
 func (s *UserProfileService) SetRole(userID int64, role string) error {
 	_, err := s.db.Exec(`UPDATE user_profile SET role=? WHERE user_id=?`, role, userID)
+	return err
+}
+
+func (s *UserProfileService) SetTestUser(userID int64, isTestUser bool) error {
+	_, err := s.db.Exec(`UPDATE user_profile SET is_test_user=? WHERE user_id=?`, isTestUser, userID)
 	return err
 }
 
