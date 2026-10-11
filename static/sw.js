@@ -1,4 +1,4 @@
-const CACHE = 'giverny-mobile-v48';
+const CACHE = 'giverny-mobile-v49';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',
@@ -6,7 +6,7 @@ const SHELL = [
   '/static/js/ws-client.js',
   '/static/js/kanban.js',
   '/static/js/card-detail.js',
-  '/static/js/mobile.js',
+  '/static/js/mobile.js?v=49',
   '/static/js/webauthn.js',
   '/static/mobile.css',
   '/static/fa/icons.css',
@@ -18,7 +18,7 @@ const SHELL = [
   '/static/icons/icon-maskable-512.png'
 ];
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(

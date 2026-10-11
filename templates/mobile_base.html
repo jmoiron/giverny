@@ -14,7 +14,7 @@
     <script src="/static/js/ws-client.js" defer></script>
     <script src="/static/js/webauthn.js" defer></script>
     {{if .mobileCard}}<script src="/static/js/card-detail.js" defer></script><script src="/static/js/kanban.js" defer></script>{{end}}
-    <script src="/static/js/mobile.js" defer></script>
+    <script src="/static/js/mobile.js?v=49" defer></script>
     <title>{{if .title}}{{.title}} — Giverny{{else}}Giverny{{end}}</title>
 </head>
 <body class="mobile-app"{{if .user}} data-user-timezone="{{.user.Timezone}}" data-disable-passkey-prompt="{{if .user.DisablePasskeyPrompt}}1{{else}}0{{end}}"{{end}}>
