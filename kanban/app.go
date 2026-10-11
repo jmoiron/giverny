@@ -951,9 +951,13 @@ func (a *App) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
+	var userID int64
+	if user != nil {
+		userID = user.ID
+	}
 	client := &Client{
 		board:  slug,
-		userID: user.ID,
+		userID: userID,
 		send:   make(chan []byte, 64),
 		conn:   conn,
 	}
@@ -1543,15 +1547,20 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	canEdit := canModifyBoard(board, user)
-	notificationSettings, err := a.users.GetNotificationSettings(user.ID)
-	if err != nil {
-		app.Http500("loading notification settings", w, err)
-		return
-	}
-	boardNotifications, err := a.notifications.BoardEnabled(user.ID, board.ID)
-	if err != nil {
-		app.Http500("loading board notification settings", w, err)
-		return
+	notificationsEnabled := false
+	boardNotifications := false
+	if user != nil {
+		notificationSettings, err := a.users.GetNotificationSettings(user.ID)
+		if err != nil {
+			app.Http500("loading notification settings", w, err)
+			return
+		}
+		notificationsEnabled = notificationSettings.DeliveryMode != gauth.NotificationDisabled
+		boardNotifications, err = a.notifications.BoardEnabled(user.ID, board.ID)
+		if err != nil {
+			app.Http500("loading board notification settings", w, err)
+			return
+		}
 	}
 	columnsWithCards, err := a.buildRenderedColumns(r, cols, cards, canEdit)
 	if err != nil {
@@ -1580,7 +1589,7 @@ func (a *App) handleBoardDetail(w http.ResponseWriter, r *http.Request) {
 		"canEdit":              canEdit,
 		"cardModalShell":       cardModalShell,
 		"mainClass":            "board-main",
-		"notificationsEnabled": notificationSettings.DeliveryMode != gauth.NotificationDisabled,
+		"notificationsEnabled": notificationsEnabled,
 		"boardNotifications":   boardNotifications,
 	}); err != nil {
 		app.Http500("rendering board", w, err)
