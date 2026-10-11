@@ -1,4 +1,4 @@
-const CACHE = 'giverny-mobile-v49';
+const CACHE = 'giverny-mobile-v50';
 const SHELL = [
   '/static/style.css',
   '/static/js/app.js',
@@ -35,6 +35,7 @@ self.addEventListener('push', event => {
   event.waitUntil(self.registration.showNotification(data.title || 'Giverny', {
     body: data.body || '',
     icon: '/static/icons/icon-192.png',
+    badge: '/static/icons/icon-maskable-192.png',
     data: {url: data.url || '/mobile/'}
   }));
 });
