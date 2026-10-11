@@ -18,7 +18,7 @@
                 <td>{{.Username}}</td>
                 <td>{{.Email}}</td>
                 <td>
-                    <form id="role-{{.ID}}" method="post" action="/admin/users/{{.ID}}/role">
+                    <form id="user-{{.ID}}" method="post" action="/admin/users/{{.ID}}/role">
                         <select name="role">
                             <option value="readonly"{{if eq .Role "readonly"}} selected{{end}}>readonly</option>
                             <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
@@ -27,10 +27,7 @@
                     </form>
                 </td>
                 <td>
-                    <form id="test-{{.ID}}" method="post" action="/admin/users/{{.ID}}/role">
-                        <input type="hidden" name="role" value="{{.Role}}">
-                        <input type="checkbox" name="is_test_user" value="1"{{if .IsTestUser}} checked{{end}}>
-                    </form>
+                    <input form="user-{{.ID}}" type="checkbox" name="is_test_user" value="1"{{if .IsTestUser}} checked{{end}}>
                 </td>
                 <td>{{.CreatedAt.Format "2006-01-02"}}</td>
                 <td>{{if .LastLoginAt}}{{.LastLoginAt.Format "2006-01-02"}}{{else}}never{{end}}</td>
@@ -38,9 +35,7 @@
                     <div class="row-actions">
                         <form id="delete-{{.ID}}" method="post" action="/admin/users/{{.ID}}/delete"></form>
                         <i class="fa-solid fa-floppy-disk action-icon save-icon"
-                           data-submit="role-{{.ID}}" title="save role"></i>
-                        <i class="fa-solid fa-floppy-disk action-icon save-icon"
-                           data-submit="test-{{.ID}}" title="save test user flag"></i>
+                           data-submit="user-{{.ID}}" title="save user"></i>
                         {{if and (not .IsSuperAdmin) (ne .ID $.user.ID)}}
                         <i class="fa-solid fa-circle-xmark action-icon delete-icon"
                            data-submit="delete-{{.ID}}"
