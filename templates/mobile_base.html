@@ -21,9 +21,12 @@
     <header class="mobile-topbar">
         <button id="mobile-left-toggle" aria-label="open navigation"><i class="fa-solid fa-bars"></i></button>
         <a href="/mobile/" class="logo">Giverny</a>
-        {{if .user}}<button id="mobile-right-toggle" aria-label="open user menu">
+    {{if .user}}<button id="mobile-right-toggle" aria-label="open user menu">
+        <span class="mobile-avatar-wrap">
             {{if .user.ProfileImageURI}}<img class="mobile-avatar" src="{{.user.ProfileImageURI}}" alt="">{{else}}<span class="mobile-avatar avatar-fallback" aria-hidden="true"></span>{{end}}
-        </button>{{end}}
+            <span class="notification-badge mobile-avatar-badge" hidden></span>
+        </span>
+    </button>{{end}}
         <div id="ws-banner" class="ws-banner is-hidden">reconnecting…</div>
     </header>
     <aside class="mobile-drawer-left" id="mobile-drawer-left">
