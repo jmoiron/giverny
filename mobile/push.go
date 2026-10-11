@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -270,10 +272,21 @@ func (p *PushService) notifyRecipients(userIDs []int64, cardID, actorID int64, a
 			continue
 		}
 		for _, stored := range subscriptions {
-			_, err := webpush.SendNotification(payload, &webpush.Subscription{Endpoint: stored.Endpoint, Keys: webpush.Keys{P256dh: stored.P256DH, Auth: stored.Auth}}, &webpush.Options{Subscriber: p.cfg.BaseURL, VAPIDPublicKey: publicKey, VAPIDPrivateKey: privateKey, TTL: 3600})
+			response, err := webpush.SendNotification(payload, &webpush.Subscription{Endpoint: stored.Endpoint, Keys: webpush.Keys{P256dh: stored.P256DH, Auth: stored.Auth}}, &webpush.Options{Subscriber: p.cfg.BaseURL, VAPIDPublicKey: publicKey, VAPIDPrivateKey: privateKey, TTL: 3600})
 			if err == nil {
 				_, _ = p.db.Exec(`UPDATE push_subscription SET last_used_at=datetime('now') WHERE id=?`, stored.ID)
+				if response != nil {
+					_ = response.Body.Close()
+				}
+				continue
 			}
+			if response != nil {
+				_ = response.Body.Close()
+				if response.StatusCode == http.StatusGone || response.StatusCode == http.StatusNotFound {
+					_, _ = p.db.Exec(`DELETE FROM push_subscription WHERE id=?`, stored.ID)
+				}
+			}
+			slog.Error("sending push notification", "user_id", userID, "subscription_id", stored.ID, "err", err)
 		}
 	}
 }

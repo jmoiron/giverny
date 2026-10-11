@@ -212,7 +212,7 @@ $(function() {
             return response.json();
         }).then(function(data) {
             if (data.enabled) return;
-            $('#notifications-link, #mobile-notifications-link').remove();
+            $('#notifications-link, #mobile-notifications-link, #mobile-enable-push').remove();
         }).catch(function() {});
     }
 

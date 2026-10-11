@@ -14,24 +14,56 @@
         return bytes;
     }
 
-    function setupPushNotifications() {
+    function setupPushNotifications(registration) {
         if (!document.body.hasAttribute('data-user-timezone')) return;
         if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
-        if (localStorage.getItem('giverny-push-prompted') === '1' || Notification.permission === 'denied') return;
-        navigator.serviceWorker.ready.then(function (registration) {
-            return registration.pushManager.getSubscription().then(function (subscription) {
-                if (subscription) return fetch('/mobile/push/subscribe', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(subscription)});
-                return Notification.requestPermission().then(function (permission) {
-                    localStorage.setItem('giverny-push-prompted', '1');
-                    if (permission !== 'granted') return null;
-                    return fetch('/mobile/push/vapid-key').then(function (response) { return response.json(); }).then(function (key) {
-                        return registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: base64urlBytes(key.publicKey)});
-                    }).then(function (newSubscription) {
-                        return fetch('/mobile/push/subscribe', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(newSubscription)});
-                    });
-                });
+        var button = document.getElementById('mobile-enable-push');
+        function setButtonVisible(visible) {
+            if (button) button.hidden = !visible;
+        }
+        function saveSubscription(subscription) {
+            return fetch('/mobile/push/subscribe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(subscription)
+            }).then(function (response) {
+                if (!response.ok) throw new Error('could not save push subscription');
+                setButtonVisible(false);
             });
-        }).catch(function () {});
+        }
+        function subscribe() {
+            return fetch('/mobile/push/vapid-key')
+                .then(function (response) {
+                    if (!response.ok) throw new Error('could not load VAPID key');
+                    return response.json();
+                })
+                .then(function (key) {
+                    return registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: base64urlBytes(key.publicKey)});
+                })
+                .then(saveSubscription);
+        }
+        registration.pushManager.getSubscription().then(function (subscription) {
+            if (subscription) {
+                return saveSubscription(subscription);
+            }
+            if (Notification.permission === 'granted') return subscribe();
+            if (Notification.permission === 'default') setButtonVisible(true);
+            return null;
+        }).catch(function () { setButtonVisible(true); });
+        if (button) button.addEventListener('click', function () {
+            button.disabled = true;
+            var permission = Notification.permission === 'granted' ? Promise.resolve('granted') : Notification.requestPermission();
+            permission.then(function (value) {
+                if (value !== 'granted') return null;
+                return subscribe();
+            }).then(function () {
+                button.disabled = false;
+                if (Notification.permission !== 'granted') setButtonVisible(true);
+            }).catch(function () {
+                button.disabled = false;
+                setButtonVisible(true);
+            });
+        });
     }
 
     function toggleDrawer(name) {
@@ -577,7 +609,7 @@
             }
         }
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/sw.js', {scope: '/mobile/'}).then(setupPushNotifications).catch(function () {});
+            navigator.serviceWorker.register('/static/sw.js').then(setupPushNotifications).catch(function () {});
         }
     });
 }());
