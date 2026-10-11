@@ -24,8 +24,7 @@
         }
         function setButtonState(enabled) {
             if (!button) return;
-            button.querySelector('span').textContent = enabled ? 'disable push notifications' : 'enable push notifications';
-            button.querySelector('i').className = 'fa-solid fa-mobile-vibrate';
+            button.querySelector('i').className = enabled ? 'fa-solid fa-mobile-vibrate' : 'fa-solid fa-mobile';
             button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
             setButtonVisible(true);
         }
