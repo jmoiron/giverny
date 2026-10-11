@@ -18,8 +18,16 @@
         if (!document.body.hasAttribute('data-user-timezone')) return;
         if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
         var button = document.getElementById('mobile-enable-push');
+        var subscription = null;
         function setButtonVisible(visible) {
             if (button) button.hidden = !visible;
+        }
+        function setButtonState(enabled) {
+            if (!button) return;
+            button.querySelector('span').textContent = enabled ? 'disable push notifications' : 'enable push notifications';
+            button.querySelector('i').className = 'fa-solid fa-mobile-vibrate';
+            button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+            setButtonVisible(true);
         }
         function saveSubscription(subscription) {
             return fetch('/mobile/push/subscribe', {
@@ -28,7 +36,7 @@
                 body: JSON.stringify(subscription)
             }).then(function (response) {
                 if (!response.ok) throw new Error('could not save push subscription');
-                setButtonVisible(false);
+                setButtonState(true);
             });
         }
         function subscribe() {
@@ -40,28 +48,49 @@
                 .then(function (key) {
                     return registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: base64urlBytes(key.publicKey)});
                 })
-                .then(saveSubscription);
+                .then(function (newSubscription) {
+                    return saveSubscription(newSubscription).then(function () {
+                        subscription = newSubscription;
+                    });
+                });
         }
-        registration.pushManager.getSubscription().then(function (subscription) {
-            if (subscription) {
-                return saveSubscription(subscription);
+        registration.pushManager.getSubscription().then(function (existingSubscription) {
+            if (existingSubscription) {
+                subscription = existingSubscription;
+                return saveSubscription(existingSubscription);
             }
-            if (Notification.permission === 'granted') return subscribe();
-            if (Notification.permission === 'default') setButtonVisible(true);
+            if (Notification.permission === 'default' || Notification.permission === 'granted') setButtonState(false);
             return null;
         }).catch(function () { setButtonVisible(true); });
         if (button) button.addEventListener('click', function () {
             button.disabled = true;
+            var currentSubscription = subscription;
+            if (currentSubscription) {
+                return fetch('/mobile/push/unsubscribe', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({endpoint: currentSubscription.endpoint})
+                }).then(function (response) {
+                    if (!response.ok) throw new Error('could not remove push subscription');
+                    return currentSubscription.unsubscribe();
+                }).then(function () {
+                    subscription = null;
+                    setButtonState(false);
+                    button.disabled = false;
+                }).catch(function () {
+                    button.disabled = false;
+                });
+            }
             var permission = Notification.permission === 'granted' ? Promise.resolve('granted') : Notification.requestPermission();
             permission.then(function (value) {
                 if (value !== 'granted') return null;
                 return subscribe();
             }).then(function () {
                 button.disabled = false;
-                if (Notification.permission !== 'granted') setButtonVisible(true);
+                if (!subscription && Notification.permission !== 'granted') setButtonState(false);
             }).catch(function () {
                 button.disabled = false;
-                setButtonVisible(true);
+                setButtonState(false);
             });
         });
     }

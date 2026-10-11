@@ -50,6 +50,7 @@ fa-solid fa-plug
 fa-solid fa-plug-circle-bolt
 fa-solid fa-bell
 fa-solid fa-bell-slash
+fa-solid fa-mobile-vibrate
 fa-solid fa-user-check
 fa-regular fa-clock
 fa-regular fa-handshake
